@@ -29,6 +29,7 @@ import {
   type ParsedVoiceSavingsDelete,
   type ParsedVoiceSavingsHistory,
   type ParsedVoiceBillPayment,
+  type ParsedVoiceBillDelete,
   type ParsedVoiceRecurringBill,
   type ParsedVoiceBudget,
   VOICE_HELP_COMMANDS,
@@ -62,6 +63,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     deleteSavingsGoal,
     addSavingsContribution,
     saveBill,
+    deleteBill,
     saveBudget,
     markBillPaid,
     savingsGoals,
@@ -79,6 +81,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   const [previewSavingsDelete, setPreviewSavingsDelete] = useState<ParsedVoiceSavingsDelete | null>(null);
   const [previewSavingsHistory, setPreviewSavingsHistory] = useState<ParsedVoiceSavingsHistory | null>(null);
   const [previewBillPayment, setPreviewBillPayment] = useState<ParsedVoiceBillPayment | null>(null);
+  const [previewBillDelete, setPreviewBillDelete] = useState<ParsedVoiceBillDelete | null>(null);
   const [previewRecurringBill, setPreviewRecurringBill] = useState<ParsedVoiceRecurringBill | null>(null);
   const [clarificationPrompt, setClarificationPrompt] = useState<string | null>(null);
   const [queryResponse, setQueryResponse] = useState<string | null>(null);
@@ -121,6 +124,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setPreviewSavingsDelete(result.savingsDelete || null);
       setPreviewSavingsHistory(result.savingsHistory || null);
       setPreviewBillPayment(result.billPayment || null);
+      setPreviewBillDelete(result.billDelete || null);
       setPreviewRecurringBill(result.recurringBill || null);
       setClarificationPrompt(result.clarificationPrompt || null);
 
@@ -140,6 +144,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setPreviewSavingsDelete(null);
       setPreviewSavingsHistory(null);
       setPreviewBillPayment(null);
+      setPreviewBillDelete(null);
       setPreviewRecurringBill(null);
       setClarificationPrompt(null);
       setQueryResponse(null);
@@ -168,6 +173,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     setPreviewSavingsDelete(null);
     setPreviewSavingsHistory(null);
     setPreviewBillPayment(null);
+    setPreviewBillDelete(null);
     setPreviewRecurringBill(null);
     setClarificationPrompt(null);
     setQueryResponse(null);
@@ -192,6 +198,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     previewSavingsDelete ||
     previewSavingsHistory ||
     previewBillPayment ||
+    previewBillDelete ||
     previewRecurringBill ||
     queryResponse
   );
@@ -454,6 +461,30 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to record bill payment: ${err.message}`);
+    }
+  };
+
+  // 9. Bill Deletion
+  const handleConfirmDeleteBill = async () => {
+    if (!previewBillDelete || isSaving) return;
+    const targetBillId = previewBillDelete.billId || (bills.length > 0 ? bills[0].id : null);
+    if (!targetBillId) return;
+    const bill = bills.find((b) => b.id === targetBillId);
+    if (!bill) return;
+
+    try {
+      setIsSaving(true);
+      await deleteBill(bill.id);
+      await refreshAllData();
+      setIsSaving(false);
+      const msg = `Deleted bill "${bill.name}".`;
+      setSuccessMessage(msg);
+      speechEngine.speak(msg);
+      onTransactionSaved();
+      setTimeout(() => { handleCloseModal(); }, 1400);
+    } catch (err: any) {
+      setIsSaving(false);
+      alert(`Failed to delete bill: ${err.message}`);
     }
   };
 
@@ -1255,6 +1286,32 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* F. Bill Delete Review */}
+          {previewBillDelete && !queryResponse && (
+            <div
+              style={{
+                padding: '10px 12px',
+                backgroundColor: 'var(--surface-subtle)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                flexShrink: 0,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Trash2 size={16} color="var(--negative-crimson)" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--negative-crimson)', textTransform: 'uppercase' }}>
+                  Action Detected: Delete Bill
+                </span>
+              </div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-primary)' }}>
+                Are you sure you want to delete bill "{previewBillDelete.billName}"?
+              </div>
+            </div>
+          )}
         </div>
 
         {/* FIXED ACTION FOOTER — ALWAYS VISIBLE WITHOUT SCROLLING (Section 10) */}
@@ -1362,6 +1419,19 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
               leftIcon={<CheckCircle size={15} />}
             >
               Confirm Bill Payment
+            </Button>
+          )}
+
+          {previewBillDelete && !queryResponse && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleConfirmDeleteBill}
+              isLoading={isSaving}
+              leftIcon={<Trash2 size={15} />}
+              style={{ backgroundColor: 'var(--negative-crimson)', borderColor: 'var(--negative-crimson)' }}
+            >
+              Confirm & Delete Bill
             </Button>
           )}
 

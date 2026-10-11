@@ -13,6 +13,7 @@ export type VoiceIntent =
   | 'SHOW_SAVINGS_HISTORY'
   | 'CREATE_RECURRING_BILL'
   | 'RECORD_BILL_PAYMENT'
+  | 'DELETE_BILL'
   | 'CORRECT_PENDING'
   | 'CANCEL_PENDING'
   | 'CONFIRM_SAVE'
@@ -76,6 +77,14 @@ export interface ParsedVoiceBillPayment {
   ambiguityReason?: string;
 }
 
+export interface ParsedVoiceBillDelete {
+  billId?: string;
+  billName: string;
+  amountMinor?: number | null;
+  isAmbiguous?: boolean;
+  ambiguityReason?: string;
+}
+
 export interface ParsedVoiceRecurringBill {
   name: string;
   amountMinor: number | null;
@@ -112,7 +121,14 @@ export interface ParsedVoiceTransaction {
 }
 
 export interface VoiceQueryResult {
-  queryType: 'monthly_expense' | 'monthly_income' | 'category_expense' | 'remaining_budget' | 'recent_transactions';
+  queryType:
+    | 'monthly_expense'
+    | 'monthly_income'
+    | 'category_expense'
+    | 'remaining_budget'
+    | 'recent_transactions'
+    | 'savings_goals'
+    | 'pending_bills';
   answerText: string;
   data?: any;
 }
@@ -139,6 +155,7 @@ export interface VoiceParseResult {
   savingsDelete?: ParsedVoiceSavingsDelete;
   savingsHistory?: ParsedVoiceSavingsHistory;
   billPayment?: ParsedVoiceBillPayment;
+  billDelete?: ParsedVoiceBillDelete;
   recurringBill?: ParsedVoiceRecurringBill;
   queryResult?: VoiceQueryResult;
   clarificationPrompt?: string;
@@ -228,38 +245,38 @@ export const VOICE_HELP_COMMANDS: VoiceCommandHelpCategory[] = [
 
 // Map Hindi / Hinglish and English number words to numeric values
 const NUMBER_WORDS: Record<string, number> = {
-  zero: 0, shunya: 0,
-  one: 1, ek: 1,
-  two: 2, do: 2,
-  three: 3, teen: 3,
-  four: 4, char: 4, chaar: 4,
-  five: 5, paanch: 5, panch: 5,
-  six: 6, chhe: 6, che: 6,
-  seven: 7, saat: 7,
-  eight: 8, aath: 8, ath: 8,
-  nine: 9, nau: 9,
-  ten: 10, das: 10,
-  eleven: 11, gyaarah: 11, gyarah: 11,
-  twelve: 12, baarah: 12, barah: 12,
-  thirteen: 13, terah: 13,
-  fourteen: 14, chaudah: 14,
-  fifteen: 15, pandrah: 15,
-  sixteen: 16, solah: 16,
-  seventeen: 17, satrah: 17,
-  eighteen: 18, athaarah: 18, atharah: 18,
-  nineteen: 19, unnis: 19,
-  twenty: 20, bees: 20,
-  thirty: 30, tees: 30,
-  forty: 40, chalees: 40, chalis: 40,
-  fifty: 50, pachaas: 50, pachas: 50,
-  sixty: 60, saath: 60, sath: 60,
-  seventy: 70, sattar: 70,
-  eighty: 80, assi: 80,
-  ninety: 90, nabbe: 90,
-  hundred: 100, sau: 100,
-  thousand: 1000, hazaar: 1000, hazar: 1000, k: 1000,
-  lakh: 100000, lac: 100000, lacs: 100000, lakhs: 100000,
-  crore: 10000000, karor: 10000000, crores: 10000000,
+  zero: 0, shunya: 0, शून्य: 0,
+  one: 1, ek: 1, 'एक': 1,
+  two: 2, do: 2, 'दो': 2,
+  three: 3, teen: 3, 'तीन': 3,
+  four: 4, char: 4, chaar: 4, 'चार': 4,
+  five: 5, paanch: 5, panch: 5, 'पांच': 5, 'पाँच': 5,
+  six: 6, chhe: 6, che: 6, 'छह': 6, 'छः': 6,
+  seven: 7, saat: 7, 'सात': 7,
+  eight: 8, aath: 8, ath: 8, 'आठ': 8,
+  nine: 9, nau: 9, 'नौ': 9,
+  ten: 10, das: 10, 'दस': 10,
+  eleven: 11, gyaarah: 11, gyarah: 11, 'ग्यारह': 11,
+  twelve: 12, baarah: 12, barah: 12, 'बारह': 12,
+  thirteen: 13, terah: 13, 'तेरह': 13,
+  fourteen: 14, chaudah: 14, 'चौदह': 14,
+  fifteen: 15, pandrah: 15, 'पंद्रह': 15,
+  sixteen: 16, solah: 16, 'सोलह': 16,
+  seventeen: 17, satrah: 17, 'सत्रह': 17,
+  eighteen: 18, athaarah: 18, atharah: 18, 'अट्ठारह': 18, 'अठारह': 18,
+  nineteen: 19, unnis: 19, 'उन्नीस': 19,
+  twenty: 20, bees: 20, 'बीस': 20,
+  thirty: 30, tees: 30, 'तीस': 30,
+  forty: 40, chalees: 40, chalis: 40, 'चालीस': 40,
+  fifty: 50, pachaas: 50, pachas: 50, 'पचास': 50,
+  sixty: 60, saath: 60, sath: 60, 'साठ': 60,
+  seventy: 70, sattar: 70, 'सत्तर': 70,
+  eighty: 80, assi: 80, 'अस्सी': 80,
+  ninety: 90, nabbe: 90, 'नब्बे': 90,
+  hundred: 100, sau: 100, 'सौ': 100,
+  thousand: 1000, hazaar: 1000, hazar: 1000, 'हजार': 1000, 'हज़ार': 1000, k: 1000,
+  lakh: 100000, lac: 100000, lacs: 100000, lakhs: 100000, 'लाख': 100000,
+  crore: 10000000, karor: 10000000, crores: 10000000, 'करोड़': 10000000,
 };
 
 /**
@@ -269,8 +286,14 @@ const NUMBER_WORDS: Record<string, number> = {
 export function normalizeVoiceText(text: string): string {
   let normalized = text.toLowerCase().trim();
   
+  // Convert Devanagari digits (०-९) to ASCII digits (0-9)
+  const devanagariDigits = ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'];
+  for (let i = 0; i < devanagariDigits.length; i++) {
+    normalized = normalized.replace(new RegExp(devanagariDigits[i], 'g'), i.toString());
+  }
+
   // Replace currency symbols & common currency words
-  normalized = normalized.replace(/₹|rs\.?|rupees|rupee|inr/gi, ' rupees ');
+  normalized = normalized.replace(/₹|rs\.?|rupees|rupee|inr|रुपये|रुपए|रुपयों|रु\b/gi, ' rupees ');
   normalized = normalized.replace(/[$€£¥]/g, ' ');
   normalized = normalized.replace(/\b(dollars?|bucks?|euros?|pounds?|yen)\b/gi, ' ');
   
@@ -279,44 +302,63 @@ export function normalizeVoiceText(text: string): string {
     normalized = normalized.replace(/(\d),(\d)/g, '$1$2');
   }
 
-  // Replace punctuation like semicolons, exclamations, etc.
-  normalized = normalized.replace(/[,;!?]/g, ' ');
+  // Replace semicolons with commas, but keep commas for clause splitting!
+  normalized = normalized.replace(/;/g, ',');
+  normalized = normalized.replace(/[!?]/g, ' ');
 
   // Expand hyphenated numbers: "fifty-five" -> "fifty five"
   normalized = normalized.replace(/(\w+)-(\w+)/g, '$1 $2');
 
-  // Colloquial composite amounts: "dedh hazaar" (1500), "dhai hazaar" (2500), "dedh sau" (150), "dhai sau" (250)
-  normalized = normalized.replace(/\bdedh\s+(?:hazaar|hazar|thousand)\b/gi, '1500');
-  normalized = normalized.replace(/\bdhai\s+(?:hazaar|hazar|thousand)\b/gi, '2500');
-  normalized = normalized.replace(/\bdedh\s+sau\b/gi, '150');
-  normalized = normalized.replace(/\bdhai\s+sau\b/gi, '250');
+  // Colloquial composite amounts: "dedh hazaar" / "डेढ़ हजार" (1500), "dhai hazaar" / "ढाई हजार" (2500)
+  normalized = normalized.replace(/(?:dedh|डेढ़|डेढ)\s+(?:hazaar|hazar|thousand|हजार|हज़ार)/gi, ' 1500 ');
+  normalized = normalized.replace(/(?:dhai|ढाई)\s+(?:hazaar|hazar|thousand|हजार|हज़ार)/gi, ' 2500 ');
+  normalized = normalized.replace(/(?:dedh|डेढ़|डेढ)\s+(?:sau|hundred|सौ)/gi, ' 150 ');
+  normalized = normalized.replace(/(?:dhai|ढाई)\s+(?:sau|hundred|सौ)/gi, ' 250 ');
   
   // Expand terms like "55k" -> "55000", "1.5k" -> "1500", "2.5k" -> "2500"
   normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*k\b/gi, (_, num) => {
     return Math.round(parseFloat(num) * 1000).toString();
   });
+
+  // Common Hindi financial terms normalization to standard keywords
+  normalized = normalized.replace(/(?:सैलरी|वेतन)/gi, ' salary ');
+  normalized = normalized.replace(/(?:बोनस)/gi, ' bonus ');
+  normalized = normalized.replace(/(?:किराना|किराने|राशन)/gi, ' groceries ');
+  normalized = normalized.replace(/(?:खाना|खाने|भोजन)/gi, ' food ');
+  normalized = normalized.replace(/(?:खर्च\s+किए|खर्च\s+किया|खर्च|खर्चे)/gi, ' spent ');
+  normalized = normalized.replace(/(?:बिजली)/gi, ' electricity ');
+  normalized = normalized.replace(/(?:बिल)/gi, ' bill ');
+  normalized = normalized.replace(/(?:बचत)/gi, ' savings ');
+  normalized = normalized.replace(/(?:लक्ष्य|गोल)/gi, ' goal ');
+  normalized = normalized.replace(/(?:बजट)/gi, ' budget ');
+  normalized = normalized.replace(/(?:पेट्रोल)/gi, ' petrol ');
+  normalized = normalized.replace(/(?:किराया)/gi, ' rent ');
+  normalized = normalized.replace(/(?:यातायात)/gi, ' transport ');
+  normalized = normalized.replace(/(?:मेरी|मेरा|मेरे)/gi, ' my ');
   
-  // Clean up whitespace
+  // Clean up whitespace around commas
+  normalized = normalized.replace(/\s*,\s*/g, ', ');
   return normalized.replace(/\s+/g, ' ').trim();
 }
 
 /**
  * Parses Indian currency amounts and numeric words from spoken text.
- * e.g., "five hundred", "55 thousand", "2 lakh", "10 hazaar", "teen sau", "₹1,200", "350", "fifteen hundred"
+ * e.g., "five hundred", "55 thousand", "2 lakh", "10 hazaar", "teen sau", "₹1,200", "350", "fifteen hundred", "50 हजार"
  */
 export function parseSpokenAmount(text: string): { amountMinor: number | null; rawAmountText: string } {
   const norm = normalizeVoiceText(text);
 
-  // Check for explicit digit amounts e.g., "1200", "55000", "350", "1500"
-  const digitsMatch = norm.match(/(\d+(?:\.\d{1,2})?)\s*(thousand|hazaar|hazar|lakh|lac|lakhs|sau|hundred)?/i);
+  // Check for explicit digit amounts e.g., "1200", "55000", "350", "1500", "50 हजार"
+  const digitsMatch = norm.match(/(\d+(?:\.\d{1,2})?)\s*(thousand|hazaar|hazar|lakh|lac|lakhs|sau|hundred|हजार|हज़ार|लाख|सौ|करोड़)?/i);
   if (digitsMatch) {
     let baseNum = parseFloat(digitsMatch[1]);
     const multiplierWord = digitsMatch[2]?.toLowerCase();
     
     if (multiplierWord) {
-      if (['thousand', 'hazaar', 'hazar'].includes(multiplierWord)) baseNum *= 1000;
-      else if (['lakh', 'lac', 'lakhs'].includes(multiplierWord)) baseNum *= 100000;
-      else if (['sau', 'hundred'].includes(multiplierWord)) baseNum *= 100;
+      if (['thousand', 'hazaar', 'hazar', 'हजार', 'हज़ार'].includes(multiplierWord)) baseNum *= 1000;
+      else if (['lakh', 'lac', 'lakhs', 'लाख'].includes(multiplierWord)) baseNum *= 100000;
+      else if (['sau', 'hundred', 'सौ'].includes(multiplierWord)) baseNum *= 100;
+      else if (['crore', 'karor', 'करोड़'].includes(multiplierWord)) baseNum *= 10000000;
     }
     
     return {
@@ -698,7 +740,7 @@ function parseSavingsGoalOrContribution(
     const { amountMinor } = parseSpokenAmount(norm);
 
     let goalName = '';
-    const forMatch = norm.match(/(?:for\s+|named\s+)([a-z0-9\s]+?)(?:\s+target|\s+of|\s+with|\s+\d|rupees|rs|$)/i);
+    const forMatch = norm.match(/(?:for\s+|named\s+)([a-z0-9\s]+?)(?:,\s*target|\s+target|\s+of|\s+with|\s+\d|rupees|rs|,|$)/i);
     if (forMatch && forMatch[1]) {
       const extracted = forMatch[1].replace(/\b(a|an|the|my)\b/gi, '').trim();
       if (extracted && !/^\d+$/.test(extracted) && !['savings', 'saving', 'goal', 'new'].includes(extracted.toLowerCase())) {
@@ -1049,105 +1091,210 @@ function parseRecurringBillCommand(
     norm.includes('loan') ||
     norm.includes('recurring');
 
-  // Guard: if user said "paid ... bill yesterday" or "spent ... bill", that's a one-off paid expense, NOT a recurring rule!
-  if (!hasRecurrence && (norm.includes('paid') || norm.includes('spent') || norm.includes('yesterday'))) {
+  if (!hasBillContext) return null;
+
+  // Guard: if user said "paid ... bill yesterday" or "spent ... bill" or "pay kiya", that's a paid expense / bill payment, NOT recurring rule creation!
+  if (
+    norm.includes('paid') ||
+    norm.includes('spent') ||
+    norm.includes('yesterday') ||
+    norm.includes('pay kiya') ||
+    norm.includes('bhara') ||
+    norm.includes('bhar diya') ||
+    norm.includes('mark as paid')
+  ) {
     return null;
   }
 
-  if (hasRecurrence && hasBillContext) {
-    const { amountMinor } = parseSpokenAmount(norm);
+  // Handle bill commands (either with recurrence words OR short phrases like "Electricity bill 1200")
+  const { amountMinor } = parseSpokenAmount(norm);
+  if (!hasRecurrence && !norm.includes('bill') && amountMinor === null) {
+    return null;
+  }
 
-    let frequency: BillFrequency = 'monthly';
-    if (
-      norm.includes('weekly') ||
-      norm.includes('every week') ||
-      norm.includes('har hafte') ||
-      norm.includes('per week') ||
-      norm.includes('each week')
-    ) {
-      frequency = 'weekly';
-    } else if (
-      norm.includes('yearly') ||
-      norm.includes('annual') ||
-      norm.includes('annually') ||
-      norm.includes('every year') ||
-      norm.includes('har saal') ||
-      norm.includes('per year')
-    ) {
-      frequency = 'yearly';
+  let frequency: BillFrequency = 'monthly';
+  if (
+    norm.includes('weekly') ||
+    norm.includes('every week') ||
+    norm.includes('har hafte') ||
+    norm.includes('per week') ||
+    norm.includes('each week')
+  ) {
+    frequency = 'weekly';
+  } else if (
+    norm.includes('yearly') ||
+    norm.includes('annual') ||
+    norm.includes('annually') ||
+    norm.includes('every year') ||
+    norm.includes('har saal') ||
+    norm.includes('per year')
+  ) {
+    frequency = 'yearly';
+  }
+
+  const cats = categories.length > 0 ? categories : BUILT_IN_CATEGORIES;
+  let billName = 'Recurring Bill';
+  let categoryId = 'cat_utilities';
+
+  if (norm.includes('rent') || norm.includes('kiraya')) {
+    billName = 'Rent';
+    categoryId = cats.find((c) => c.id === 'cat_housing')?.id || 'cat_housing';
+  } else if (norm.includes('internet') || norm.includes('wifi') || norm.includes('broadband')) {
+    billName = 'Internet Bill';
+    categoryId = cats.find((c) => c.id === 'cat_utilities')?.id || 'cat_utilities';
+  } else if (norm.includes('electricity') || norm.includes('bijli') || norm.includes('power')) {
+    billName = 'Electricity Bill';
+    categoryId = cats.find((c) => c.id === 'cat_utilities')?.id || 'cat_utilities';
+  } else if (norm.includes('insurance') || norm.includes('bima')) {
+    billName = 'Insurance';
+    categoryId =
+      cats.find((c) => c.id === 'cat_health')?.id ||
+      cats.find((c) => c.id === 'cat_expense_other')?.id ||
+      'cat_utilities';
+  } else if (norm.includes('gym') || norm.includes('fitness')) {
+    billName = 'Gym Membership';
+    categoryId = cats.find((c) => c.id === 'cat_health')?.id || 'cat_health';
+  } else if (norm.includes('netflix') || norm.includes('spotify') || norm.includes('subscription')) {
+    billName = 'Subscription';
+    categoryId = cats.find((c) => c.id === 'cat_entertainment')?.id || 'cat_entertainment';
+  } else if (norm.includes('recharge') || norm.includes('mobile')) {
+    billName = 'Mobile Recharge';
+    categoryId = cats.find((c) => c.id === 'cat_utilities')?.id || 'cat_utilities';
+  } else {
+    const match = norm.match(
+      /(?:add\s+(?:a\s+)?)?(?:monthly\s+|weekly\s+|yearly\s+)?([a-z0-9\s]+?)(?:\s+bill|\s+payment|\s+of|\s+\d|$)/i
+    );
+    if (match && match[1]) {
+      billName = `${capitalizeWords(match[1].trim())} Bill`;
     }
+  }
 
-    const cats = categories.length > 0 ? categories : BUILT_IN_CATEGORIES;
-    let billName = 'Recurring Bill';
-    let categoryId = 'cat_utilities';
+  const missingFields: string[] = [];
+  if (!amountMinor || amountMinor <= 0) {
+    missingFields.push('amount');
+  }
 
-    if (norm.includes('rent') || norm.includes('kiraya')) {
-      billName = 'Rent';
-      categoryId = cats.find((c) => c.id === 'cat_housing')?.id || 'cat_housing';
-    } else if (norm.includes('internet') || norm.includes('wifi') || norm.includes('broadband')) {
-      billName = 'Internet Bill';
-      categoryId = cats.find((c) => c.id === 'cat_utilities')?.id || 'cat_utilities';
-    } else if (norm.includes('electricity') || norm.includes('bijli') || norm.includes('power')) {
-      billName = 'Electricity Bill';
-      categoryId = cats.find((c) => c.id === 'cat_utilities')?.id || 'cat_utilities';
-    } else if (norm.includes('insurance') || norm.includes('bima')) {
-      billName = 'Insurance';
-      categoryId =
-        cats.find((c) => c.id === 'cat_health')?.id ||
-        cats.find((c) => c.id === 'cat_expense_other')?.id ||
-        'cat_utilities';
-    } else if (norm.includes('gym') || norm.includes('fitness')) {
-      billName = 'Gym Membership';
-      categoryId = cats.find((c) => c.id === 'cat_health')?.id || 'cat_health';
-    } else if (norm.includes('netflix') || norm.includes('spotify') || norm.includes('subscription')) {
-      billName = 'Subscription';
-      categoryId = cats.find((c) => c.id === 'cat_entertainment')?.id || 'cat_entertainment';
-    } else if (norm.includes('recharge') || norm.includes('mobile')) {
-      billName = 'Mobile Recharge';
-      categoryId = cats.find((c) => c.id === 'cat_utilities')?.id || 'cat_utilities';
-    } else {
-      const match = norm.match(
-        /(?:add\s+(?:a\s+)?)?(?:monthly\s+|weekly\s+|yearly\s+)?([a-z0-9\s]+?)(?:\s+bill|\s+payment|\s+of|\s+\d|$)/i
+  let clarificationPrompt: string | undefined = undefined;
+  if (missingFields.includes('amount')) {
+    clarificationPrompt = 'What is the amount for this recurring bill?';
+  }
+
+  const isAmbiguous = missingFields.length > 0;
+
+  return {
+    rawTranscript: transcript,
+    normalizedTranscript: norm,
+    intent: isAmbiguous ? 'ambiguous' : 'CREATE_RECURRING_BILL',
+    explicitIntent: 'CREATE_RECURRING_BILL',
+    transactions: [],
+    recurringBill: {
+      name: billName,
+      amountMinor,
+      frequency,
+      categoryId,
+      dueDateLocal: getTodayLocalDateString(),
+      isAmbiguous,
+      ambiguityReason: clarificationPrompt,
+      missingFields,
+    },
+    clarificationPrompt,
+    missingFields,
+  };
+}
+
+function parseBillDeleteCommand(
+  norm: string,
+  transcript: string,
+  existingBills: Bill[] = []
+): VoiceParseResult | null {
+  const isDeleteBill =
+    (norm.startsWith('delete') ||
+      norm.startsWith('remove') ||
+      norm.startsWith('cancel') ||
+      norm.includes('delete') ||
+      norm.includes('remove')) &&
+    (norm.includes('bill') || norm.includes('bills')) &&
+    !norm.includes('goal') &&
+    !norm.includes('transaction');
+
+  if (!isDeleteBill) return null;
+
+  let billPhrase = '';
+  const match = norm.match(/(?:delete|remove|cancel)\s+(?:my\s+|the\s+|old\s+)?([a-z0-9\s]+?)(?:\s+bill|$)/i);
+  if (match && match[1]) {
+    billPhrase = match[1].replace(/\b(my|the|a|an|old)\b/gi, '').trim();
+  }
+
+  let matchedBill: Bill | undefined;
+  if (existingBills && existingBills.length > 0) {
+    if (billPhrase) {
+      const clean = billPhrase.toLowerCase().trim();
+      const matches = existingBills.filter(
+        (b) => b.name.toLowerCase().includes(clean) || clean.includes(b.name.toLowerCase())
       );
-      if (match && match[1]) {
-        billName = `${capitalizeWords(match[1].trim())} Bill`;
+      if (matches.length === 1) {
+        matchedBill = matches[0];
+      } else if (matches.length > 1) {
+        return {
+          rawTranscript: transcript,
+          normalizedTranscript: norm,
+          intent: 'ambiguous',
+          explicitIntent: 'DELETE_BILL',
+          transactions: [],
+          clarificationPrompt: `Multiple bills match "${billPhrase}". Please specify which bill you want to delete: ${matches.map((b) => b.name).join(', ')}.`,
+          missingFields: ['billName'],
+        };
       }
+    } else if (existingBills.length === 1) {
+      matchedBill = existingBills[0];
+    } else if (existingBills.length > 1) {
+      return {
+        rawTranscript: transcript,
+        normalizedTranscript: norm,
+        intent: 'ambiguous',
+        explicitIntent: 'DELETE_BILL',
+        transactions: [],
+        clarificationPrompt: `Which bill would you like to delete? Available bills: ${existingBills.map((b) => b.name).join(', ')}.`,
+        missingFields: ['billName'],
+      };
     }
+  }
 
-    const missingFields: string[] = [];
-    if (!amountMinor || amountMinor <= 0) {
-      missingFields.push('amount');
+  if (!matchedBill) {
+    if (existingBills.length === 0) {
+      return {
+        rawTranscript: transcript,
+        normalizedTranscript: norm,
+        intent: 'ambiguous',
+        explicitIntent: 'DELETE_BILL',
+        transactions: [],
+        clarificationPrompt: 'You do not have any bills to delete.',
+        missingFields: ['billName'],
+      };
     }
-
-    let clarificationPrompt: string | undefined = undefined;
-    if (missingFields.includes('amount')) {
-      clarificationPrompt = 'What is the amount for this recurring bill?';
-    }
-
-    const isAmbiguous = missingFields.length > 0;
-
     return {
       rawTranscript: transcript,
       normalizedTranscript: norm,
-      intent: isAmbiguous ? 'ambiguous' : 'CREATE_RECURRING_BILL',
-      explicitIntent: 'CREATE_RECURRING_BILL',
+      intent: 'ambiguous',
+      explicitIntent: 'DELETE_BILL',
       transactions: [],
-      recurringBill: {
-        name: billName,
-        amountMinor,
-        frequency,
-        categoryId,
-        dueDateLocal: getTodayLocalDateString(),
-        isAmbiguous,
-        ambiguityReason: clarificationPrompt,
-        missingFields,
-      },
-      clarificationPrompt,
-      missingFields,
+      clarificationPrompt: `Which bill would you like to delete? Available bills: ${existingBills.map((b) => b.name).join(', ')}.`,
+      missingFields: ['billName'],
     };
   }
 
-  return null;
+  return {
+    rawTranscript: transcript,
+    normalizedTranscript: norm,
+    intent: 'DELETE_BILL',
+    explicitIntent: 'DELETE_BILL',
+    transactions: [],
+    billDelete: {
+      billId: matchedBill.id,
+      billName: matchedBill.name,
+      amountMinor: matchedBill.amountMinor,
+    },
+  };
 }
 
 /**
@@ -1224,38 +1371,68 @@ export function parseVoiceCommand(
 
     // 0d. Corrections to pending transaction (Amount, Category, Date, Type)
     const isCorrectionUtterance =
-      /\b(no|make it|change|actually|instead|category|amount|date|yesterday|today|kal|aaj|hai|nahi|not)\b/i.test(norm);
+      /\b(no|make it|change|actually|instead|category|amount|date|yesterday|today|kal|aaj|hai|nahi|not|nahin|badlo)\b/i.test(norm);
 
     if (isCorrectionUtterance) {
       const targetTx = { ...pendingContext.pendingTransactions[0] };
       let changedSomething = false;
 
-      // Correction: Amount
-      const amtMatch = parseSpokenAmount(norm);
-      if (amtMatch.amountMinor !== null) {
-        targetTx.amountMinor = amtMatch.amountMinor;
+      // Correction: Amount with negation / correction support
+      // e.g. "Amount 500 nahi, 300 hai", "Not 500, 300", "500 nahi 300", "make it 300"
+      const negatedMatch =
+        norm.match(/\b\d+\s*(?:nahi|not|nahin|instead)\b[,\s]+(?:make it\s+|but\s+)?(\d+)\b/i) ||
+        norm.match(/\b(?:not|instead of)\s+\d+[,\s]+(?:make it\s+|but\s+)?(\d+)\b/i) ||
+        norm.match(/(?:nahi|not|nahin)\s*,?\s*(\d+)\s*(?:hai)?/i);
+
+      if (negatedMatch && negatedMatch[1]) {
+        targetTx.amountMinor = Math.round(parseFloat(negatedMatch[1]) * 100);
         targetTx.isAmbiguous = false;
         changedSomething = true;
-      }
-
-      // Correction: Category
-      const cats = categories && categories.length > 0 ? categories : BUILT_IN_CATEGORIES;
-      for (const cat of cats) {
-        if (!cat.isArchived && norm.includes(cat.name.toLowerCase())) {
-          targetTx.categoryId = cat.id;
+      } else {
+        const amtMatch = parseSpokenAmount(norm);
+        if (amtMatch.amountMinor !== null) {
+          targetTx.amountMinor = amtMatch.amountMinor;
+          targetTx.isAmbiguous = false;
           changedSomething = true;
-          break;
         }
       }
-      if (norm.includes('transport') || norm.includes('petrol') || norm.includes('fuel')) {
-        targetTx.categoryId = cats.find((c) => c.id === 'cat_transport')?.id || 'cat_transport';
-        changedSomething = true;
-      } else if (norm.includes('grocery') || norm.includes('groceries')) {
-        targetTx.categoryId = cats.find((c) => c.id === 'cat_groceries')?.id || 'cat_groceries';
-        changedSomething = true;
-      } else if (norm.includes('food') || norm.includes('lunch') || norm.includes('dinner')) {
-        targetTx.categoryId = cats.find((c) => c.id === 'cat_food')?.id || 'cat_food';
-        changedSomething = true;
+
+      // Correction: Category (including "food se transport mein badlo" / "change from food to transport")
+      const cats = categories && categories.length > 0 ? categories : BUILT_IN_CATEGORIES;
+      const changeToMatch =
+        norm.match(/(?:se|from)\s+[a-z0-9\s]+\s+(?:mein|to|into)\s+([a-z0-9]+)/i) ||
+        norm.match(/(?:to|into)\s+([a-z0-9]+)\s*(?:mein\s+badlo|category)?/i);
+
+      if (changeToMatch && changeToMatch[1]) {
+        const targetCatName = changeToMatch[1].trim();
+        for (const cat of cats) {
+          if (!cat.isArchived && (cat.name.toLowerCase() === targetCatName || cat.id.includes(targetCatName))) {
+            targetTx.categoryId = cat.id;
+            changedSomething = true;
+            break;
+          }
+        }
+      } else {
+        for (const cat of cats) {
+          if (!cat.isArchived && norm.includes(cat.name.toLowerCase())) {
+            targetTx.categoryId = cat.id;
+            changedSomething = true;
+            break;
+          }
+        }
+      }
+
+      if (!changedSomething || (changeToMatch && !targetTx.categoryId)) {
+        if (norm.includes('transport') || norm.includes('petrol') || norm.includes('fuel')) {
+          targetTx.categoryId = cats.find((c) => c.id === 'cat_transport')?.id || 'cat_transport';
+          changedSomething = true;
+        } else if (norm.includes('grocery') || norm.includes('groceries')) {
+          targetTx.categoryId = cats.find((c) => c.id === 'cat_groceries')?.id || 'cat_groceries';
+          changedSomething = true;
+        } else if (norm.includes('food') || norm.includes('lunch') || norm.includes('dinner')) {
+          targetTx.categoryId = cats.find((c) => c.id === 'cat_food')?.id || 'cat_food';
+          changedSomething = true;
+        }
       }
 
       // Correction: Date
@@ -1292,6 +1469,57 @@ export function parseVoiceCommand(
   }
 
   // 1. Check for Local Q&A Query intent
+  if (
+    norm.includes('savings goal') ||
+    norm.includes('savings goals') ||
+    norm.includes('saving goal') ||
+    norm.includes('saving goals')
+  ) {
+    if (
+      (norm.includes('show') ||
+        norm.includes('view') ||
+        norm.includes('see') ||
+        norm.includes('list') ||
+        norm.includes('what are') ||
+        norm.includes('how many')) &&
+      !norm.includes('history') &&
+      !norm.includes('deposit') &&
+      !norm.includes('contribute')
+    ) {
+      return {
+        rawTranscript: transcript,
+        normalizedTranscript: norm,
+        intent: 'query_financials',
+        explicitIntent: 'query_financials',
+        transactions: [],
+        queryResult: {
+          queryType: 'savings_goals',
+          answerText: 'Showing your savings goals...',
+        },
+      };
+    }
+  }
+
+  if (
+    norm.includes('show pending bills') ||
+    norm.includes('show my bills') ||
+    norm.includes('show bills') ||
+    norm.includes('view bills') ||
+    norm.includes('pending bills')
+  ) {
+    return {
+      rawTranscript: transcript,
+      normalizedTranscript: norm,
+      intent: 'query_financials',
+      explicitIntent: 'query_financials',
+      transactions: [],
+      queryResult: {
+        queryType: 'pending_bills',
+        answerText: 'Showing your pending bills...',
+      },
+    };
+  }
+
   if (
     norm.includes('how much did i spend') ||
     norm.includes('how much spent') ||
@@ -1385,19 +1613,14 @@ export function parseVoiceCommand(
     };
   }
 
-  // 2. Check for Budget Setting Commands (Section 4: "Set my monthly food budget to 5,000")
+  // 2. Check for Budget Setting Commands (e.g. "Food budget 5000", "Mere food budget ko 5,000 set kar do")
   if (
     norm.includes('budget') &&
-    (norm.startsWith('set') ||
-      norm.startsWith('change') ||
-      norm.startsWith('update') ||
-      norm.includes('set my') ||
-      norm.includes('change my') ||
-      norm.includes('budget to') ||
-      norm.includes('budget of')) &&
     !norm.includes('how much') &&
+    !norm.includes('kitna') &&
     !norm.includes('remaining') &&
-    !norm.includes('left')
+    !norm.includes('left') &&
+    !norm.includes('bacha')
   ) {
     const { amountMinor } = parseSpokenAmount(norm);
     const cats = categories && categories.length > 0 ? categories : BUILT_IN_CATEGORIES;
@@ -1410,10 +1633,14 @@ export function parseVoiceCommand(
       }
     }
     if (!matchedCat) {
-      if (norm.includes('food') || norm.includes('groceries')) {
+      if (norm.includes('food') || norm.includes('khana')) {
         matchedCat = cats.find((c) => c.id === 'cat_food' || c.id === 'cat_groceries');
+      } else if (norm.includes('grocery') || norm.includes('groceries')) {
+        matchedCat = cats.find((c) => c.id === 'cat_groceries');
       } else if (norm.includes('transport') || norm.includes('petrol')) {
         matchedCat = cats.find((c) => c.id === 'cat_transport');
+      } else if (norm.includes('shopping') || norm.includes('clothes')) {
+        matchedCat = cats.find((c) => c.id === 'cat_shopping');
       }
     }
 
@@ -1440,10 +1667,13 @@ export function parseVoiceCommand(
     };
   }
 
-  // 3. Check for Savings Goal / Contribution, Bill Payment, & Recurring Bill commands
+  // 3. Check for Savings Goal / Contribution, Bill Payment, Recurring Bill, and Bill Delete commands
   const savingsResult = parseSavingsGoalOrContribution(norm, transcript, existingSavingsGoals);
   const billPaymentResult = parseBillPaymentCommand(norm, transcript, existingBills);
+  const billDeleteResult = parseBillDeleteCommand(norm, transcript, existingBills);
   const recurringResult = parseRecurringBillCommand(norm, transcript, categories);
+
+  if (billDeleteResult) return billDeleteResult;
 
   // If both savings and recurring match with conflicting intent, ask user to clarify
   if (savingsResult && recurringResult) {
@@ -1463,9 +1693,10 @@ export function parseVoiceCommand(
   if (billPaymentResult) return billPaymentResult;
   if (recurringResult) return recurringResult;
 
-  // 4. Multi-clause transactions (e.g. "Salary 55,000 and bonus 2,000", "Add 250 for lunch and 100 for tea",
+  // 4. Multi-clause transactions (e.g. "Salary 50,000, bonus 200, grocery 500, food 300",
+  // "Salary 55,000 and bonus 2,000", "Add 250 for lunch and 100 for tea",
   // "I spent 500 on petrol and received 3,000 from freelance work")
-  const conjunctionRegex = /\s+(?:and\s+also|and\s+received|and\s+spent|and|aur|\+)\s+/i;
+  const conjunctionRegex = /(?:,\s*|\s+(?:and\s+also|and\s+received|and\s+spent|and|aur|\+)\s+)/i;
   if (conjunctionRegex.test(norm)) {
     const rawClauses = norm.split(conjunctionRegex).map((c) => c.trim()).filter(Boolean);
     if (rawClauses.length > 1) {
@@ -1583,6 +1814,16 @@ function parseSingleTransactionClause(
     norm.includes('petrol') ||
     norm.includes('fuel') ||
     norm.includes('diesel') ||
+    norm.includes('transport') ||
+    norm.includes('travel') ||
+    norm.includes('auto') ||
+    norm.includes('cab') ||
+    norm.includes('taxi') ||
+    norm.includes('metro') ||
+    norm.includes('bus') ||
+    norm.includes('train') ||
+    norm.includes('flight') ||
+    norm.includes('vehicle') ||
     norm.includes('shopping') ||
     norm.includes('food') ||
     norm.includes('grocery') ||
@@ -1830,6 +2071,13 @@ export function executeVoiceQuery(
   summary: MonthlySummary | null,
   currencyCode: string = 'INR'
 ): string {
+  if (query.queryType === 'savings_goals') {
+    return 'Showing your savings goals and current target progress.';
+  }
+  if (query.queryType === 'pending_bills') {
+    return 'Showing your scheduled recurring bills and upcoming due dates.';
+  }
+
   if (!summary) {
     return 'No financial data is available for this period yet.';
   }
