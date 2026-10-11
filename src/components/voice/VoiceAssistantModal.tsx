@@ -848,23 +848,29 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                   <span style={{ fontSize: '0.6875rem', color: 'var(--ink-muted)' }}>Tap example to test</span>
                 </div>
 
-                <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '6px', marginBottom: '8px' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '6px',
+                    marginBottom: '10px',
+                  }}
+                >
                   {VOICE_HELP_COMMANDS.map((cat, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => setActiveHelpCategory(idx)}
                       style={{
-                        padding: '4px 10px',
-                        borderRadius: '16px',
-                        fontSize: '0.72rem',
+                        padding: '5px 10px',
+                        borderRadius: '8px',
+                        fontSize: '0.71875rem',
                         fontWeight: activeHelpCategory === idx ? 700 : 500,
                         backgroundColor: activeHelpCategory === idx ? '#4F46E5' : 'var(--surface-card)',
                         color: activeHelpCategory === idx ? '#FFFFFF' : 'var(--ink-secondary)',
                         border: '1px solid ' + (activeHelpCategory === idx ? '#4F46E5' : 'var(--border-color)'),
-                        whiteSpace: 'nowrap',
                         cursor: 'pointer',
-                        flexShrink: 0,
+                        transition: 'all 0.15s ease',
                       }}
                     >
                       {cat.title}
