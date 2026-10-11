@@ -345,4 +345,42 @@ describe('SpendMic AI Voice Engine — Master Test Suite (All 20 Scenarios)', ()
     expect(tx.dateLocal).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(tx.isAmbiguous).toBeFalsy();
   });
+
+  it('Parses key keywords directly: saving goal, salary, bonus, expense', () => {
+    // 1. Savings Goal
+    const rGoal1 = parseVoiceCommand('saving goal 20000', DEFAULT_CATEGORIES);
+    expect(rGoal1.intent).toBe('CREATE_SAVINGS_GOAL');
+    expect(rGoal1.savingsGoal?.targetMinor).toBe(2000000);
+
+    const rGoal2 = parseVoiceCommand('savings goal of 50000 for car', DEFAULT_CATEGORIES);
+    expect(rGoal2.intent).toBe('CREATE_SAVINGS_GOAL');
+    expect(rGoal2.savingsGoal?.targetMinor).toBe(5000000);
+
+    // 2. Salary
+    const rSal1 = parseVoiceCommand('salary 50000', DEFAULT_CATEGORIES);
+    expect(rSal1.intent).toBe('ADD_INCOME');
+    expect(rSal1.transactions[0].type).toBe('income');
+    expect(rSal1.transactions[0].amountMinor).toBe(5000000);
+    expect(rSal1.transactions[0].categoryId).toBe('cat_salary');
+
+    const rSal2 = parseVoiceCommand('add salary 50000', DEFAULT_CATEGORIES);
+    expect(rSal2.transactions[0].type).toBe('income');
+    expect(rSal2.transactions[0].categoryId).toBe('cat_salary');
+
+    // 3. Bonus
+    const rBon1 = parseVoiceCommand('bonus 2000', DEFAULT_CATEGORIES);
+    expect(rBon1.transactions[0].type).toBe('income');
+    expect(rBon1.transactions[0].amountMinor).toBe(200000);
+    expect(rBon1.transactions[0].categoryId).toBe('cat_bonus');
+
+    const rBon2 = parseVoiceCommand('add bonus 2000', DEFAULT_CATEGORIES);
+    expect(rBon2.transactions[0].type).toBe('income');
+    expect(rBon2.transactions[0].categoryId).toBe('cat_bonus');
+
+    // 4. Expense
+    const rExp = parseVoiceCommand('expense 500 for groceries', DEFAULT_CATEGORIES);
+    expect(rExp.transactions[0].type).toBe('expense');
+    expect(rExp.transactions[0].amountMinor).toBe(50000);
+    expect(rExp.transactions[0].categoryId).toBe('cat_groceries');
+  });
 });

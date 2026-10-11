@@ -674,52 +674,56 @@ function parseSavingsGoalOrContribution(
   }
 
   // 4. CREATE_SAVINGS_GOAL vs ADD_SAVINGS_CONTRIBUTION
-  // Note: Check CREATE first if command explicitly says create/start/save for/set/new savings goal
+  // Note: Check CREATE first if command mentions saving(s) goal or saving for a goal
+  const hasSavingsGoalPhrase =
+    norm.includes('savings goal') ||
+    norm.includes('saving goal') ||
+    norm.includes('bachat goal') ||
+    (norm.includes('save for') && !norm.includes('saved for')) ||
+    (/\bsave\s+\d+/i.test(norm) && !norm.includes('spent') && !norm.includes('saved')) ||
+    (norm.startsWith('save ') && !norm.includes('saved') && !norm.includes('spend'));
+
+  const isContributionPhrase =
+    /\b(add|put|deposit|contribute|transfer)\s+(?:.*?\s+)?(to|into|towards|in)\b/i.test(norm) ||
+    norm.includes('deposit') ||
+    norm.includes('contribute') ||
+    norm.includes('jama');
+
   const isExplicitCreate =
-    (norm.startsWith('create') ||
-      norm.startsWith('new') ||
-      norm.startsWith('start') ||
-      norm.startsWith('set up') ||
-      norm.startsWith('set a') ||
-      norm.startsWith('set ') ||
-      norm.startsWith('save for') ||
-      norm.includes('create a') ||
-      norm.includes('create new') ||
-      norm.includes('set a savings goal') ||
-      norm.includes('savings goal of') ||
-      norm.includes('save for')) &&
-    (norm.includes('savings goal') || norm.includes('saving goal') || norm.includes('save for')) &&
-    !norm.includes('deposit') &&
-    !norm.includes('contribute') &&
+    hasSavingsGoalPhrase &&
+    !isContributionPhrase &&
     !norm.includes('budget');
 
   if (isExplicitCreate) {
     const { amountMinor } = parseSpokenAmount(norm);
 
     let goalName = '';
-    const createWithNameMatch = norm.match(
-      /(?:create|new|start|set up|set a|set)\s+(?:a\s+|an\s+)?([a-z0-9\s]+?)\s+(?:savings\s+goal|saving\s+goal|goal)\s+(?:of|with|target|\d)/i
-    );
-    if (createWithNameMatch && createWithNameMatch[1]) {
-      const extracted = createWithNameMatch[1].replace(/\b(a|an|the)\b/gi, '').trim();
-      if (extracted && extracted.toLowerCase() !== 'savings' && extracted.toLowerCase() !== 'saving') {
+    const forMatch = norm.match(/(?:for\s+|named\s+)([a-z0-9\s]+?)(?:\s+target|\s+of|\s+with|\s+\d|rupees|rs|$)/i);
+    if (forMatch && forMatch[1]) {
+      const extracted = forMatch[1].replace(/\b(a|an|the|my)\b/gi, '').trim();
+      if (extracted && !/^\d+$/.test(extracted) && !['savings', 'saving', 'goal', 'new'].includes(extracted.toLowerCase())) {
         goalName = extracted;
       }
-    } else {
-      const saveForMatch = norm.match(
-        /save\s+for\s+(?:a\s+|an\s+|the\s+)?([a-z0-9\s]+?)(?:,|target|of|with|\d|rupees|rs|$)/i
+    }
+    if (!goalName) {
+      const createWithNameMatch = norm.match(
+        /(?:create|new|start|set up|set a|set|add)\s+(?:a\s+|an\s+)?([a-z0-9\s]+?)\s+(?:savings\s+goal|saving\s+goal|goal)\s+(?:of|with|target|\d)/i
       );
-      if (saveForMatch && saveForMatch[1]) {
-        goalName = saveForMatch[1].replace(/\b(a|an|the)\b/gi, '').trim();
-      } else {
-        const goalForMatch = norm.match(
-          /(?:savings\s+goal|saving\s+goal)\s+(?:for\s+|of\s+)?(?:a\s+|an\s+|the\s+)?([a-z0-9\s]+?)(?:,|target|of|with|\d|rupees|rs|$)/i
-        );
-        if (goalForMatch && goalForMatch[1]) {
-          const extracted = goalForMatch[1].replace(/\b(a|an|the)\b/gi, '').trim();
-          if (extracted && extracted.toLowerCase() !== 'savings' && extracted.toLowerCase() !== 'saving') {
-            goalName = extracted;
-          }
+      if (createWithNameMatch && createWithNameMatch[1]) {
+        const extracted = createWithNameMatch[1].replace(/\b(a|an|the)\b/gi, '').trim();
+        if (extracted && !/^\d+$/.test(extracted) && extracted.toLowerCase() !== 'savings' && extracted.toLowerCase() !== 'saving') {
+          goalName = extracted;
+        }
+      }
+    }
+    if (!goalName) {
+      const goalForMatch = norm.match(
+        /(?:savings\s+goal|saving\s+goal)\s+(?:for\s+|named\s+)(?:a\s+|an\s+|the\s+)?([a-z0-9\s]+?)(?:,|target|of|with|\d|rupees|rs|$)/i
+      );
+      if (goalForMatch && goalForMatch[1]) {
+        const extracted = goalForMatch[1].replace(/\b(a|an|the)\b/gi, '').trim();
+        if (extracted && !/^\d+$/.test(extracted) && extracted.toLowerCase() !== 'savings' && extracted.toLowerCase() !== 'saving') {
+          goalName = extracted;
         }
       }
     }
@@ -1544,6 +1548,7 @@ function parseSingleTransactionClause(
   // Detect Income vs Expense keywords
   const isIncomeKeyword =
     norm.includes('salary') ||
+    norm.includes('income') ||
     norm.includes('bonus') ||
     norm.includes('bounus') ||
     norm.includes('freelance') ||
@@ -1704,6 +1709,8 @@ function parseSingleTransactionClause(
     norm.includes('business')
   ) {
     categoryId = pickCategoryId(['cat_freelance', 'freelance'], 'income');
+  } else if (norm.includes('income')) {
+    categoryId = pickCategoryId(['cat_income_other', 'other-income'], 'income');
   } else if (
     norm.includes('petrol') ||
     norm.includes('fuel') ||
