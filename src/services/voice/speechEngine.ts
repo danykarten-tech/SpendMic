@@ -422,6 +422,12 @@ class LocalSpeechEngine {
     }
     this.state.status = 'ready';
     this.state.statusMessage = 'Voice ready — Tap mic to speak';
+    this.state.transcript = '';
+    this.notify();
+  }
+
+  public clearTranscript() {
+    this.state.transcript = '';
     this.notify();
   }
 

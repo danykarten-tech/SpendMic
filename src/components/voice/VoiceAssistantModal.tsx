@@ -92,7 +92,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   useEffect(() => {
     const unsubscribe = speechEngine.subscribe((state) => {
       setEngineState(state);
-      if (state.transcript) {
+      if (state.status === 'listening' && state.transcript) {
         setManualTranscript(state.transcript);
       }
     });
@@ -164,6 +164,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   if (!isOpen) return null;
 
   const clearActivePreviews = () => {
+    speechEngine.clearTranscript();
     setManualTranscript('');
     setPreviewTransactions([]);
     setPreviewBudget(null);
@@ -190,19 +191,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
 
   const handleCancel = () => {
     speechEngine.cancelListening();
-    setManualTranscript('');
-    setPreviewTransactions([]);
-    setPreviewBudget(null);
-    setPreviewSavingsGoal(null);
-    setPreviewSavingsContribution(null);
-    setPreviewSavingsEdit(null);
-    setPreviewSavingsDelete(null);
-    setPreviewSavingsHistory(null);
-    setPreviewBillPayment(null);
-    setPreviewBillDelete(null);
-    setPreviewRecurringBill(null);
-    setClarificationPrompt(null);
-    setQueryResponse(null);
+    clearActivePreviews();
     setSuccessMessage(null);
   };
 
@@ -260,14 +249,16 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       }
 
       await refreshAllData();
-      setIsSaving(false);
       const msg = `Saved ${savedCount} transaction${savedCount > 1 ? 's' : ''} to your account!`;
       setSuccessMessage(msg);
+      clearActivePreviews();
       speechEngine.stopListening();
       setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
+
+      await refreshAllData();
+      setIsSaving(false);
       onTransactionSaved();
-      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to save transaction: ${err.message}`);
@@ -287,16 +278,17 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
         categoryId: previewBudget.categoryId || undefined,
       });
 
-      await refreshAllData();
-      setIsSaving(false);
       const amtStr = (previewBudget.monthlyLimitMinor / 100).toLocaleString();
       const msg = `Saved budget of ${currencySymbol}${amtStr} for ${previewBudget.categoryName || 'all expenses'}!`;
       setSuccessMessage(msg);
+      clearActivePreviews();
       speechEngine.stopListening();
       setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
+
+      await refreshAllData();
+      setIsSaving(false);
       onTransactionSaved();
-      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to save budget: ${err.message}`);
@@ -322,16 +314,17 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
         icon: previewSavingsGoal.icon || 'target',
       });
 
-      await refreshAllData();
-      setIsSaving(false);
       const targetStr = (previewSavingsGoal.targetMinor / 100).toLocaleString();
       const msg = `Created savings goal "${previewSavingsGoal.name}" with target ${currencySymbol}${targetStr}!`;
       setSuccessMessage(msg);
+      clearActivePreviews();
       speechEngine.stopListening();
       setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
+
+      await refreshAllData();
+      setIsSaving(false);
       onTransactionSaved();
-      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to create savings goal: ${err.message}`);
@@ -359,17 +352,18 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
         previewSavingsContribution.note || `Voice Deposit: ${manualTranscript}`
       );
 
-      await refreshAllData();
-      setIsSaving(false);
       const goal = savingsGoals.find((g) => g.id === targetGoalId);
       const amtStr = (previewSavingsContribution.amountMinor / 100).toLocaleString();
       const msg = `Added ${currencySymbol}${amtStr} to "${goal?.name || 'Savings Goal'}"!`;
       setSuccessMessage(msg);
+      clearActivePreviews();
       speechEngine.stopListening();
       setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
+
+      await refreshAllData();
+      setIsSaving(false);
       onTransactionSaved();
-      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to add deposit: ${err.message}`);
@@ -396,16 +390,17 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
         isPaid: false,
       });
 
-      await refreshAllData();
-      setIsSaving(false);
       const amtStr = (previewRecurringBill.amountMinor / 100).toLocaleString();
       const msg = `Saved recurring monthly bill for "${previewRecurringBill.name}" (${currencySymbol}${amtStr})!`;
       setSuccessMessage(msg);
+      clearActivePreviews();
       speechEngine.stopListening();
       setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
+
+      await refreshAllData();
+      setIsSaving(false);
       onTransactionSaved();
-      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to save recurring bill: ${err.message}`);
@@ -423,16 +418,18 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     try {
       setIsSaving(true);
       await saveSavingsGoal({ ...goal, targetMinor: previewSavingsEdit.newTargetMinor }, goal.id);
-      await refreshAllData();
-      setIsSaving(false);
+
       const targetStr = (previewSavingsEdit.newTargetMinor / 100).toLocaleString();
       const msg = `Updated target for "${goal.name}" to ${currencySymbol}${targetStr}!`;
       setSuccessMessage(msg);
+      clearActivePreviews();
       speechEngine.stopListening();
       setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
+
+      await refreshAllData();
+      setIsSaving(false);
       onTransactionSaved();
-      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to update goal: ${err.message}`);
@@ -450,15 +447,17 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     try {
       setIsSaving(true);
       await deleteSavingsGoal(goal.id);
-      await refreshAllData();
-      setIsSaving(false);
+
       const msg = `Deleted savings goal "${goal.name}".`;
       setSuccessMessage(msg);
+      clearActivePreviews();
       speechEngine.stopListening();
       setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
+
+      await refreshAllData();
+      setIsSaving(false);
       onTransactionSaved();
-      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to delete goal: ${err.message}`);
@@ -476,15 +475,17 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     try {
       setIsSaving(true);
       await markBillPaid(bill.id, true);
-      await refreshAllData();
-      setIsSaving(false);
+
       const msg = `Recorded bill payment for "${bill.name}"!`;
       setSuccessMessage(msg);
+      clearActivePreviews();
       speechEngine.stopListening();
       setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
+
+      await refreshAllData();
+      setIsSaving(false);
       onTransactionSaved();
-      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to record bill payment: ${err.message}`);
@@ -502,15 +503,17 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     try {
       setIsSaving(true);
       await deleteBill(bill.id);
-      await refreshAllData();
-      setIsSaving(false);
+
       const msg = `Deleted bill "${bill.name}".`;
       setSuccessMessage(msg);
+      clearActivePreviews();
       speechEngine.stopListening();
       setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
+
+      await refreshAllData();
+      setIsSaving(false);
       onTransactionSaved();
-      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to delete bill: ${err.message}`);
