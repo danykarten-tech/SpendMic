@@ -393,21 +393,24 @@ class LocalSpeechEngine {
       try {
         this.recognition.stop();
       } catch (e) {}
+      this.isNativeListening = false;
     }
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-      this.mediaRecorder.stop();
+      try {
+        this.mediaRecorder.stop();
+      } catch (e) {}
       if (this.mediaStream) {
         this.mediaStream.getTracks().forEach((track) => track.stop());
       }
-      this.state.status = 'processing';
-      this.state.statusMessage = 'Processing recorded speech...';
-      this.notify();
     }
+    this.state.status = 'ready';
+    this.state.statusMessage = 'Voice ready — Tap mic to speak';
+    this.notify();
   }
 
   public cancelListening() {
     this.isUserListening = false;
-    if (this.recognition) {
+    if (this.recognition && this.isNativeListening) {
       try {
         this.recognition.abort();
       } catch (e) {}
