@@ -99,6 +99,16 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     return () => unsubscribe();
   }, []);
 
+  // Auto-start microphone listening when modal opens, cancel when closed
+  useEffect(() => {
+    if (isOpen) {
+      setSuccessMessage(null);
+      speechEngine.startListening();
+    } else {
+      speechEngine.cancelListening();
+    }
+  }, [isOpen]);
+
   // Parse command whenever transcript changes
   useEffect(() => {
     if (manualTranscript.trim()) {
@@ -152,6 +162,22 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   }, [manualTranscript, categories, monthlySummary, currentCurrency.code, savingsGoals, bills]);
 
   if (!isOpen) return null;
+
+  const clearActivePreviews = () => {
+    setManualTranscript('');
+    setPreviewTransactions([]);
+    setPreviewBudget(null);
+    setPreviewSavingsGoal(null);
+    setPreviewSavingsContribution(null);
+    setPreviewSavingsEdit(null);
+    setPreviewSavingsDelete(null);
+    setPreviewSavingsHistory(null);
+    setPreviewBillPayment(null);
+    setPreviewBillDelete(null);
+    setPreviewRecurringBill(null);
+    setClarificationPrompt(null);
+    setQueryResponse(null);
+  };
 
   const handleStartListening = async () => {
     setSuccessMessage(null);
@@ -239,10 +265,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setSuccessMessage(msg);
       speechEngine.speak(msg);
       onTransactionSaved();
-
-      setTimeout(() => {
-        handleCloseModal();
-      }, 1400);
+      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to save transaction: ${err.message}`);
@@ -269,10 +292,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setSuccessMessage(msg);
       speechEngine.speak(msg);
       onTransactionSaved();
-
-      setTimeout(() => {
-        handleCloseModal();
-      }, 1400);
+      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to save budget: ${err.message}`);
@@ -305,10 +325,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setSuccessMessage(msg);
       speechEngine.speak(msg);
       onTransactionSaved();
-
-      setTimeout(() => {
-        handleCloseModal();
-      }, 1400);
+      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to create savings goal: ${err.message}`);
@@ -344,10 +361,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setSuccessMessage(msg);
       speechEngine.speak(msg);
       onTransactionSaved();
-
-      setTimeout(() => {
-        handleCloseModal();
-      }, 1400);
+      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to add deposit: ${err.message}`);
@@ -381,10 +395,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setSuccessMessage(msg);
       speechEngine.speak(msg);
       onTransactionSaved();
-
-      setTimeout(() => {
-        handleCloseModal();
-      }, 1400);
+      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to save recurring bill: ${err.message}`);
@@ -409,7 +420,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setSuccessMessage(msg);
       speechEngine.speak(msg);
       onTransactionSaved();
-      setTimeout(() => { handleCloseModal(); }, 1400);
+      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to update goal: ${err.message}`);
@@ -433,7 +444,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setSuccessMessage(msg);
       speechEngine.speak(msg);
       onTransactionSaved();
-      setTimeout(() => { handleCloseModal(); }, 1400);
+      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to delete goal: ${err.message}`);
@@ -457,7 +468,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setSuccessMessage(msg);
       speechEngine.speak(msg);
       onTransactionSaved();
-      setTimeout(() => { handleCloseModal(); }, 1400);
+      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to record bill payment: ${err.message}`);
@@ -481,7 +492,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setSuccessMessage(msg);
       speechEngine.speak(msg);
       onTransactionSaved();
-      setTimeout(() => { handleCloseModal(); }, 1400);
+      clearActivePreviews();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to delete bill: ${err.message}`);
@@ -489,7 +500,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   };
 
   return (
-    <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && handleCloseModal()}>
+    <div className="modal-backdrop">
       <div
         className="modal-content"
         style={{
@@ -837,22 +848,23 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                   <span style={{ fontSize: '0.6875rem', color: 'var(--ink-muted)' }}>Tap example to test</span>
                 </div>
 
-                <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '6px', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '6px', marginBottom: '8px' }}>
                   {VOICE_HELP_COMMANDS.map((cat, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => setActiveHelpCategory(idx)}
                       style={{
-                        padding: '3px 8px',
+                        padding: '4px 10px',
                         borderRadius: '16px',
-                        fontSize: '0.6875rem',
+                        fontSize: '0.72rem',
                         fontWeight: activeHelpCategory === idx ? 700 : 500,
                         backgroundColor: activeHelpCategory === idx ? '#4F46E5' : 'var(--surface-card)',
                         color: activeHelpCategory === idx ? '#FFFFFF' : 'var(--ink-secondary)',
                         border: '1px solid ' + (activeHelpCategory === idx ? '#4F46E5' : 'var(--border-color)'),
                         whiteSpace: 'nowrap',
                         cursor: 'pointer',
+                        flexShrink: 0,
                       }}
                     >
                       {cat.title}
@@ -860,8 +872,8 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                   ))}
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                  {VOICE_HELP_COMMANDS[activeHelpCategory]?.examples.slice(0, 2).map((ex, exIdx) => (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: '135px', overflowY: 'auto' }}>
+                  {VOICE_HELP_COMMANDS[activeHelpCategory]?.examples.map((ex, exIdx) => (
                     <div
                       key={exIdx}
                       style={{
@@ -871,8 +883,8 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                         backgroundColor: 'var(--surface-card)',
                         border: '1px solid var(--border-color)',
                         borderRadius: '8px',
-                        padding: '5px 8px',
-                        fontSize: '0.75rem',
+                        padding: '6px 10px',
+                        fontSize: '0.78125rem',
                       }}
                     >
                       <button

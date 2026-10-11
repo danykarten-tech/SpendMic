@@ -43,6 +43,7 @@ class LocalSpeechEngine {
   private initPromise: Promise<void> | null = null;
   private recognition: any = null;
   private isNativeListening: boolean = false;
+  private isUserListening: boolean = false;
 
   constructor() {
     this.initNativeRecognition();
@@ -58,7 +59,8 @@ class LocalSpeechEngine {
     if (SpeechRecognitionClass) {
       try {
         this.recognition = new SpeechRecognitionClass();
-        this.recognition.continuous = false;
+        // Keep listening continuously so user can speak with natural pauses/delays without cutting off
+        this.recognition.continuous = true;
         this.recognition.interimResults = true;
         this.recognition.maxAlternatives = 1;
         // Prioritize English & Indian English, understanding accents and Hinglish numbers
@@ -76,15 +78,15 @@ class LocalSpeechEngine {
         this.recognition.onresult = (event: any) => {
           let finalTranscript = '';
           let interimTranscript = '';
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
+          for (let i = 0; i < event.results.length; ++i) {
             const piece = event.results[i][0]?.transcript || '';
             if (event.results[i].isFinal) {
-              finalTranscript += piece;
+              finalTranscript += piece + ' ';
             } else {
               interimTranscript += piece;
             }
           }
-          const text = (finalTranscript || interimTranscript).trim();
+          const text = (finalTranscript + interimTranscript).trim();
           if (text) {
             this.state.transcript = text;
             this.notify();
@@ -93,22 +95,39 @@ class LocalSpeechEngine {
 
         this.recognition.onerror = (event: any) => {
           console.warn('Native speech recognition event:', event.error);
-          this.isNativeListening = false;
           if (event.error === 'not-allowed') {
+            this.isUserListening = false;
+            this.isNativeListening = false;
             this.state.status = 'error';
             this.state.errorMessage = 'Microphone permission denied. Please allow microphone access.';
             this.notify();
           } else if (event.error === 'no-speech') {
-            this.state.status = 'ready';
-            this.state.statusMessage = 'No speech detected — Tap mic and try again.';
-            this.notify();
+            // In continuous listening, ignore silence timeouts and keep listening if user hasn't stopped
+            if (!this.isUserListening) {
+              this.isNativeListening = false;
+              this.state.status = 'ready';
+              this.state.statusMessage = 'No speech detected — Tap mic and try again.';
+              this.notify();
+            }
           } else {
-            this.state.status = 'ready';
-            this.notify();
+            if (!this.isUserListening) {
+              this.isNativeListening = false;
+              this.state.status = 'ready';
+              this.notify();
+            }
           }
         };
 
         this.recognition.onend = () => {
+          // If the user has not pressed Stop or Close, keep listening across silence boundaries
+          if (this.isUserListening && this.recognition) {
+            try {
+              this.recognition.start();
+              return;
+            } catch (e) {
+              // Ignore if already starting
+            }
+          }
           this.isNativeListening = false;
           this.state.status = 'ready';
           this.state.statusMessage = this.state.transcript ? 'Transcription complete.' : 'Offline voice ready';
@@ -282,6 +301,7 @@ class LocalSpeechEngine {
    * Starts microphone recording (continuous until user stops)
    */
   public async startListening() {
+    this.isUserListening = true;
     this.state.transcript = '';
     this.state.errorMessage = undefined;
 
@@ -291,6 +311,10 @@ class LocalSpeechEngine {
         this.recognition.start();
         return;
       } catch (err: any) {
+        if (err.name === 'InvalidStateError') {
+          // Already running
+          return;
+        }
         console.warn('Native speech recognition start failed, using MediaRecorder fallback:', err);
       }
     }
@@ -353,6 +377,7 @@ class LocalSpeechEngine {
       this.state.statusMessage = 'Listening... Speak your expense, income, bills or savings command.';
       this.notify();
     } catch (err: any) {
+      this.isUserListening = false;
       this.state.status = 'error';
       this.state.errorMessage = 'Microphone permission denied or unavailable.';
       this.notify();
@@ -363,6 +388,7 @@ class LocalSpeechEngine {
    * Stops listening and triggers processing
    */
   public stopListening() {
+    this.isUserListening = false;
     if (this.recognition && this.isNativeListening) {
       try {
         this.recognition.stop();
@@ -380,6 +406,7 @@ class LocalSpeechEngine {
   }
 
   public cancelListening() {
+    this.isUserListening = false;
     if (this.recognition) {
       try {
         this.recognition.abort();

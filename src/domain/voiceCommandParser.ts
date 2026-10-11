@@ -171,11 +171,12 @@ export interface VoiceCommandHelpCategory {
 
 export const VOICE_HELP_COMMANDS: VoiceCommandHelpCategory[] = [
   {
-    title: 'Salary & Other Income',
+    title: 'Salary & Income',
     intent: 'ADD_INCOME',
     examples: [
+      'Salary 50,000',
+      'Bonus 200',
       'My salary is 55000',
-      'I received a 200 bonus',
       'Earned 5000 freelance income',
     ],
   },
@@ -183,8 +184,10 @@ export const VOICE_HELP_COMMANDS: VoiceCommandHelpCategory[] = [
     title: 'Expenses',
     intent: 'ADD_EXPENSE',
     examples: [
+      'Grocery 500',
+      'Food 300',
+      'Transport 150',
       'I spent 350 on petrol yesterday',
-      'Shopping par 1200 kharch kiye',
       'Paid 450 for grocery',
     ],
   },
@@ -225,20 +228,52 @@ export const VOICE_HELP_COMMANDS: VoiceCommandHelpCategory[] = [
     ],
   },
   {
-    title: 'Create a Recurring Bill',
+    title: 'Recurring Bills & Rent',
     intent: 'CREATE_RECURRING_BILL',
     examples: [
-      'Add a monthly internet bill of 999',
       'My rent is 10000 every month',
+      'Add a monthly internet bill of 999',
       'Add yearly insurance of 12000',
     ],
   },
   {
-    title: 'Record a Bill Payment',
+    title: 'Bills & Payments',
     intent: 'RECORD_BILL_PAYMENT',
+    allowedIntents: ['RECORD_BILL_PAYMENT', 'CREATE_RECURRING_BILL', 'DELETE_BILL'],
     examples: [
+      'Electricity bill 1200',
       'Record bill payment for rent',
       'Mark internet bill as paid',
+      'Delete internet bill',
+    ],
+  },
+  {
+    title: 'Budgets',
+    intent: 'SET_BUDGET',
+    examples: [
+      'Food budget 5000',
+      'Set my monthly grocery budget to 6000',
+    ],
+  },
+  {
+    title: 'Queries & Reports',
+    intent: 'query_financials',
+    examples: [
+      'How much did I spend this month?',
+      'What is my total income?',
+      'Show my savings goals',
+      'Show pending bills',
+    ],
+  },
+  {
+    title: 'Hindi & Hinglish',
+    intent: 'ADD_EXPENSE',
+    allowedIntents: ['ADD_EXPENSE', 'ADD_INCOME', 'CREATE_RECURRING_BILL', 'SET_BUDGET'],
+    examples: [
+      'मेरी सैलरी 50 हजार',
+      'किराने पर 500 खर्च किए',
+      'बिजली का बिल 1200',
+      'Mere food budget ko 5,000 set kar do',
     ],
   },
 ];
