@@ -264,6 +264,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       const msg = `Saved ${savedCount} transaction${savedCount > 1 ? 's' : ''} to your account!`;
       setSuccessMessage(msg);
       speechEngine.stopListening();
+      setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
       onTransactionSaved();
       clearActivePreviews();
@@ -292,6 +293,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       const msg = `Saved budget of ${currencySymbol}${amtStr} for ${previewBudget.categoryName || 'all expenses'}!`;
       setSuccessMessage(msg);
       speechEngine.stopListening();
+      setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
       onTransactionSaved();
       clearActivePreviews();
@@ -326,6 +328,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       const msg = `Created savings goal "${previewSavingsGoal.name}" with target ${currencySymbol}${targetStr}!`;
       setSuccessMessage(msg);
       speechEngine.stopListening();
+      setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
       onTransactionSaved();
       clearActivePreviews();
@@ -363,6 +366,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       const msg = `Added ${currencySymbol}${amtStr} to "${goal?.name || 'Savings Goal'}"!`;
       setSuccessMessage(msg);
       speechEngine.stopListening();
+      setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
       onTransactionSaved();
       clearActivePreviews();
@@ -398,6 +402,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       const msg = `Saved recurring monthly bill for "${previewRecurringBill.name}" (${currencySymbol}${amtStr})!`;
       setSuccessMessage(msg);
       speechEngine.stopListening();
+      setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
       onTransactionSaved();
       clearActivePreviews();
@@ -424,6 +429,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       const msg = `Updated target for "${goal.name}" to ${currencySymbol}${targetStr}!`;
       setSuccessMessage(msg);
       speechEngine.stopListening();
+      setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
       onTransactionSaved();
       clearActivePreviews();
@@ -449,6 +455,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       const msg = `Deleted savings goal "${goal.name}".`;
       setSuccessMessage(msg);
       speechEngine.stopListening();
+      setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
       onTransactionSaved();
       clearActivePreviews();
@@ -474,6 +481,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       const msg = `Recorded bill payment for "${bill.name}"!`;
       setSuccessMessage(msg);
       speechEngine.stopListening();
+      setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
       onTransactionSaved();
       clearActivePreviews();
@@ -499,10 +507,10 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       const msg = `Deleted bill "${bill.name}".`;
       setSuccessMessage(msg);
       speechEngine.stopListening();
+      setEngineState((prev) => ({ ...prev, status: 'ready', statusMessage: 'Voice ready — Tap mic to speak' }));
       speechEngine.speak(msg);
       onTransactionSaved();
       clearActivePreviews();
-      await speechEngine.startListening();
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to delete bill: ${err.message}`);

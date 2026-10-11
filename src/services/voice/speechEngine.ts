@@ -42,8 +42,9 @@ class LocalSpeechEngine {
   private audioChunks: Blob[] = [];
   private initPromise: Promise<void> | null = null;
   private recognition: any = null;
-  private isNativeListening: boolean = false;
   private isUserListening: boolean = false;
+  private currentUtterance: SpeechSynthesisUtterance | null = null;
+  private audioFeedbackContext: AudioContext | null = null;
 
   constructor() {
     this.initNativeRecognition();
@@ -69,13 +70,22 @@ class LocalSpeechEngine {
           : 'en-IN';
 
         this.recognition.onstart = () => {
-          this.isNativeListening = true;
+          if (!this.isUserListening) {
+            try {
+              this.recognition.abort();
+            } catch (e) {}
+            this.state.status = 'ready';
+            this.state.statusMessage = 'Voice ready — Tap mic to speak';
+            this.notify();
+            return;
+          }
           this.state.status = 'listening';
           this.state.statusMessage = 'Listening... Speak your expense, income, bills or savings command.';
           this.notify();
         };
 
         this.recognition.onresult = (event: any) => {
+          if (!this.isUserListening) return;
           let finalTranscript = '';
           let interimTranscript = '';
           for (let i = 0; i < event.results.length; ++i) {
@@ -95,23 +105,26 @@ class LocalSpeechEngine {
 
         this.recognition.onerror = (event: any) => {
           console.warn('Native speech recognition event:', event.error);
+          if (!this.isUserListening) {
+            this.state.status = 'ready';
+            this.state.statusMessage = 'Voice ready — Tap mic to speak';
+            this.notify();
+            return;
+          }
           if (event.error === 'not-allowed') {
             this.isUserListening = false;
-            this.isNativeListening = false;
             this.state.status = 'error';
             this.state.errorMessage = 'Microphone permission denied. Please allow microphone access.';
             this.notify();
           } else if (event.error === 'no-speech') {
             // In continuous listening, ignore silence timeouts and keep listening if user hasn't stopped
             if (!this.isUserListening) {
-              this.isNativeListening = false;
               this.state.status = 'ready';
               this.state.statusMessage = 'No speech detected — Tap mic and try again.';
               this.notify();
             }
           } else {
             if (!this.isUserListening) {
-              this.isNativeListening = false;
               this.state.status = 'ready';
               this.notify();
             }
@@ -128,9 +141,8 @@ class LocalSpeechEngine {
               // Ignore if already starting
             }
           }
-          this.isNativeListening = false;
           this.state.status = 'ready';
-          this.state.statusMessage = this.state.transcript ? 'Transcription complete.' : 'Offline voice ready';
+          this.state.statusMessage = 'Voice ready — Tap mic to speak';
           this.notify();
         };
 
@@ -385,23 +397,28 @@ class LocalSpeechEngine {
   }
 
   /**
-   * Stops listening and triggers processing
+   * Stops listening and returns engine to ready state
    */
   public stopListening() {
     this.isUserListening = false;
-    if (this.recognition && this.isNativeListening) {
+    if (this.recognition) {
+      try {
+        this.recognition.abort();
+      } catch (e) {}
       try {
         this.recognition.stop();
       } catch (e) {}
-      this.isNativeListening = false;
     }
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       try {
         this.mediaRecorder.stop();
       } catch (e) {}
-      if (this.mediaStream) {
+    }
+    if (this.mediaStream) {
+      try {
         this.mediaStream.getTracks().forEach((track) => track.stop());
-      }
+      } catch (e) {}
+      this.mediaStream = null;
     }
     this.state.status = 'ready';
     this.state.statusMessage = 'Voice ready — Tap mic to speak';
@@ -410,11 +427,13 @@ class LocalSpeechEngine {
 
   public cancelListening() {
     this.isUserListening = false;
-    if (this.recognition && this.isNativeListening) {
+    if (this.recognition) {
       try {
         this.recognition.abort();
       } catch (e) {}
-      this.isNativeListening = false;
+      try {
+        this.recognition.stop();
+      } catch (e) {}
     }
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       try {
@@ -422,7 +441,10 @@ class LocalSpeechEngine {
       } catch (e) {}
     }
     if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach((track) => track.stop());
+      try {
+        this.mediaStream.getTracks().forEach((track) => track.stop());
+      } catch (e) {}
+      this.mediaStream = null;
     }
     this.state.status = 'ready';
     this.state.statusMessage = 'Listening cancelled.';
@@ -491,17 +513,108 @@ class LocalSpeechEngine {
   }
 
   /**
-   * Offline Text-To-Speech Output using browser window.speechSynthesis
+   * Plays an immediate pleasant success chime sound via Web Audio API.
+   * Works consistently on all browsers without relying on external audio assets or OS TTS voices.
    */
-
-  public speak(text: string) {
-    if (this.state.isMuted || !('speechSynthesis' in window)) return;
+  public playSuccessChime() {
+    if (this.state.isMuted || typeof window === 'undefined') return;
     try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      window.speechSynthesis.speak(utterance);
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtxClass) return;
+      if (!this.audioFeedbackContext || this.audioFeedbackContext.state === 'closed') {
+        this.audioFeedbackContext = new AudioCtxClass();
+      }
+      if (this.audioFeedbackContext.state === 'suspended') {
+        this.audioFeedbackContext.resume();
+      }
+
+      const ctx = this.audioFeedbackContext;
+      const now = ctx.currentTime;
+      // High-pitched, warm 3-tone chime: C5 (523Hz) -> E5 (659Hz) -> G5 (784Hz)
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(523.25, now);
+      osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.1);
+      osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.2);
+
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.45);
+    } catch (e) {
+      // Audio chime error ignored
+    }
+  }
+
+  /**
+   * Speaks voice confirmation using browser window.speechSynthesis, backed by instant audio chime
+   */
+  public speak(text: string) {
+    if (this.state.isMuted || typeof window === 'undefined') return;
+
+    // 1. Play immediate positive audio chime sound
+    this.playSuccessChime();
+
+    // 2. Output spoken voice response via SpeechSynthesis
+    if (!('speechSynthesis' in window)) return;
+
+    try {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+      if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+        window.speechSynthesis.cancel();
+      }
+
+      // Small 60ms delay prevents Chrome bug where cancel() discards immediate speak() calls
+      setTimeout(() => {
+        try {
+          if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+
+          const utterance = new SpeechSynthesisUtterance(text);
+          this.currentUtterance = utterance; // Prevent garbage collection bug in Chrome/Safari
+
+          utterance.rate = 1.0;
+          utterance.pitch = 1.0;
+          utterance.lang = 'en-US';
+
+          // Pick an English or system default voice if available
+          const voices = window.speechSynthesis.getVoices();
+          if (voices && voices.length > 0) {
+            const preferredVoice =
+              voices.find((v) => v.lang.startsWith('en') || v.lang.startsWith('hi')) ||
+              voices.find((v) => v.default) ||
+              voices[0];
+            if (preferredVoice) {
+              utterance.voice = preferredVoice;
+            }
+          }
+
+          utterance.onend = () => {
+            if (this.currentUtterance === utterance) {
+              this.currentUtterance = null;
+            }
+          };
+
+          utterance.onerror = () => {
+            if (this.currentUtterance === utterance) {
+              this.currentUtterance = null;
+            }
+          };
+
+          window.speechSynthesis.speak(utterance);
+        } catch (e) {
+          // Ignore utterance error
+        }
+      }, 60);
     } catch (e) {
       // Ignore speech synthesis failures
     }
