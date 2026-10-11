@@ -12,32 +12,28 @@ import {
   Target,
   PiggyBank,
   Repeat,
-  Edit3,
   Trash2,
-  History,
-  CreditCard,
-  Copy,
-  Check,
   HelpCircle,
   Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { speechEngine, SpeechEngineState } from '../../services/voice/speechEngine';
 import {
   parseVoiceCommand,
   executeVoiceQuery,
-  VoiceParseResult,
-  VoiceIntent,
-  ParsedVoiceTransaction,
-  ParsedVoiceSavingsGoal,
-  ParsedVoiceSavingsContribution,
-  ParsedVoiceSavingsEdit,
-  ParsedVoiceSavingsDelete,
-  ParsedVoiceSavingsHistory,
-  ParsedVoiceBillPayment,
-  ParsedVoiceRecurringBill,
+  type VoiceParseResult,
+  type ParsedVoiceTransaction,
+  type ParsedVoiceSavingsGoal,
+  type ParsedVoiceSavingsContribution,
+  type ParsedVoiceSavingsEdit,
+  type ParsedVoiceSavingsDelete,
+  type ParsedVoiceSavingsHistory,
+  type ParsedVoiceBillPayment,
+  type ParsedVoiceRecurringBill,
+  type ParsedVoiceBudget,
   VOICE_HELP_COMMANDS,
 } from '../../domain/voiceCommandParser';
-import { Category, TransactionType, MonthlySummary, BillFrequency } from '../../domain/types';
+import { Category, MonthlySummary } from '../../domain/types';
 import { useApp } from '../../context/AppContext';
 import { getTodayLocalDateString, getCurrentLocalTimeString } from '../../domain/moneyAndDate';
 import { resolveTransactionCategory } from '../../domain/categoriesData';
@@ -65,8 +61,8 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     saveSavingsGoal,
     deleteSavingsGoal,
     addSavingsContribution,
-    openSavingsDetailsModal,
     saveBill,
+    saveBudget,
     markBillPaid,
     savingsGoals,
     bills,
@@ -75,8 +71,8 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
 
   const [engineState, setEngineState] = useState<SpeechEngineState>(speechEngine.getState());
   const [manualTranscript, setManualTranscript] = useState<string>('');
-  const [activeIntent, setActiveIntent] = useState<VoiceIntent | null>(null);
   const [previewTransactions, setPreviewTransactions] = useState<ParsedVoiceTransaction[]>([]);
+  const [previewBudget, setPreviewBudget] = useState<ParsedVoiceBudget | null>(null);
   const [previewSavingsGoal, setPreviewSavingsGoal] = useState<ParsedVoiceSavingsGoal | null>(null);
   const [previewSavingsContribution, setPreviewSavingsContribution] = useState<ParsedVoiceSavingsContribution | null>(null);
   const [previewSavingsEdit, setPreviewSavingsEdit] = useState<ParsedVoiceSavingsEdit | null>(null);
@@ -89,7 +85,6 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeHelpCategory, setActiveHelpCategory] = useState<number>(0);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = speechEngine.subscribe((state) => {
@@ -109,10 +104,17 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
         categories,
         currentCurrency.code,
         savingsGoals,
-        bills
+        bills,
+        previewTransactions.length > 0 ? { pendingTransactions: previewTransactions } : undefined
       );
-      setActiveIntent(result.intent);
+
+      if (result.intent === 'CANCEL_PENDING') {
+        handleCancel();
+        return;
+      }
+
       setPreviewTransactions(result.transactions || []);
+      setPreviewBudget(result.budget || null);
       setPreviewSavingsGoal(result.savingsGoal || null);
       setPreviewSavingsContribution(result.savingsContribution || null);
       setPreviewSavingsEdit(result.savingsEdit || null);
@@ -130,8 +132,8 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
         setQueryResponse(null);
       }
     } else {
-      setActiveIntent(null);
       setPreviewTransactions([]);
+      setPreviewBudget(null);
       setPreviewSavingsGoal(null);
       setPreviewSavingsContribution(null);
       setPreviewSavingsEdit(null);
@@ -159,6 +161,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     speechEngine.cancelListening();
     setManualTranscript('');
     setPreviewTransactions([]);
+    setPreviewBudget(null);
     setPreviewSavingsGoal(null);
     setPreviewSavingsContribution(null);
     setPreviewSavingsEdit(null);
@@ -167,7 +170,12 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     setPreviewBillPayment(null);
     setPreviewRecurringBill(null);
     setClarificationPrompt(null);
+    setQueryResponse(null);
     setSuccessMessage(null);
+  };
+
+  const handleCloseModal = () => {
+    handleCancel();
     onClose();
   };
 
@@ -175,9 +183,22 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     setManualTranscript(sample);
   };
 
-  // 1. Transaction Saver (Income & Expense)
+  const hasActiveContent = Boolean(
+    previewTransactions.length > 0 ||
+    previewBudget ||
+    previewSavingsGoal ||
+    previewSavingsContribution ||
+    previewSavingsEdit ||
+    previewSavingsDelete ||
+    previewSavingsHistory ||
+    previewBillPayment ||
+    previewRecurringBill ||
+    queryResponse
+  );
+
+  // 1. Transaction Saver with Idempotency & Storage Verification
   const handleSaveTransactions = async () => {
-    if (previewTransactions.length === 0) return;
+    if (previewTransactions.length === 0 || isSaving) return;
 
     try {
       setIsSaving(true);
@@ -213,17 +234,47 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       onTransactionSaved();
 
       setTimeout(() => {
-        handleCancel();
-      }, 1500);
+        handleCloseModal();
+      }, 1400);
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to save transaction: ${err.message}`);
     }
   };
 
-  // 2. Savings Goal Creator
+  // 2. Budget Saver
+  const handleSaveBudget = async () => {
+    if (!previewBudget || !previewBudget.monthlyLimitMinor || previewBudget.monthlyLimitMinor <= 0 || isSaving) return;
+
+    try {
+      setIsSaving(true);
+      const periodKey = new Date().toISOString().substring(0, 7);
+      await saveBudget({
+        periodKey,
+        limitMinor: previewBudget.monthlyLimitMinor,
+        categoryId: previewBudget.categoryId || undefined,
+      });
+
+      await refreshAllData();
+      setIsSaving(false);
+      const amtStr = (previewBudget.monthlyLimitMinor / 100).toLocaleString();
+      const msg = `Saved budget of ${currencySymbol}${amtStr} for ${previewBudget.categoryName || 'all expenses'}!`;
+      setSuccessMessage(msg);
+      speechEngine.speak(msg);
+      onTransactionSaved();
+
+      setTimeout(() => {
+        handleCloseModal();
+      }, 1400);
+    } catch (err: any) {
+      setIsSaving(false);
+      alert(`Failed to save budget: ${err.message}`);
+    }
+  };
+
+  // 3. Savings Goal Creator
   const handleSaveSavingsGoal = async () => {
-    if (!previewSavingsGoal) return;
+    if (!previewSavingsGoal || isSaving) return;
     if (!previewSavingsGoal.targetMinor || previewSavingsGoal.targetMinor <= 0) {
       alert('Please enter a valid target amount.');
       return;
@@ -249,61 +300,58 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       onTransactionSaved();
 
       setTimeout(() => {
-        handleCancel();
-      }, 1500);
+        handleCloseModal();
+      }, 1400);
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to create savings goal: ${err.message}`);
     }
   };
 
-  // 3. Savings Contribution Adder
+  // 4. Savings Contribution
   const handleSaveSavingsContribution = async () => {
-    if (!previewSavingsContribution) return;
-    if (!previewSavingsContribution.amountMinor || previewSavingsContribution.amountMinor <= 0) {
-      alert('Please enter a valid contribution amount.');
+    if (!previewSavingsContribution || isSaving) return;
+    const targetGoalId = previewSavingsContribution.matchedGoalId || (savingsGoals.length > 0 ? savingsGoals[0].id : null);
+    if (!targetGoalId) {
+      alert('Please select a valid savings goal.');
       return;
     }
-
-    const targetGoalId =
-      previewSavingsContribution.matchedGoalId ||
-      (savingsGoals.length > 0 ? savingsGoals[0].id : null);
-
-    if (!targetGoalId) {
-      alert('Please select a target savings goal.');
+    if (!previewSavingsContribution.amountMinor || previewSavingsContribution.amountMinor <= 0) {
+      alert('Please enter a valid deposit amount.');
       return;
     }
 
     try {
       setIsSaving(true);
-      const { goal } = await addSavingsContribution(
+      await addSavingsContribution(
         targetGoalId,
         previewSavingsContribution.amountMinor,
-        previewSavingsContribution.note || `Voice contribution: ${manualTranscript}`
+        previewSavingsContribution.note || `Voice Deposit: ${manualTranscript}`
       );
 
       await refreshAllData();
       setIsSaving(false);
-      const contribStr = (previewSavingsContribution.amountMinor / 100).toLocaleString();
-      const msg = `Added ${currencySymbol}${contribStr} to "${goal.name}"!`;
+      const goal = savingsGoals.find((g) => g.id === targetGoalId);
+      const amtStr = (previewSavingsContribution.amountMinor / 100).toLocaleString();
+      const msg = `Added ${currencySymbol}${amtStr} to "${goal?.name || 'Savings Goal'}"!`;
       setSuccessMessage(msg);
       speechEngine.speak(msg);
       onTransactionSaved();
 
       setTimeout(() => {
-        handleCancel();
-      }, 1500);
+        handleCloseModal();
+      }, 1400);
     } catch (err: any) {
       setIsSaving(false);
-      alert(`Failed to add contribution: ${err.message}`);
+      alert(`Failed to add deposit: ${err.message}`);
     }
   };
 
-  // 4. Recurring Bill Creator
+  // 5. Recurring Bill
   const handleSaveRecurringBill = async () => {
-    if (!previewRecurringBill) return;
+    if (!previewRecurringBill || isSaving) return;
     if (!previewRecurringBill.amountMinor || previewRecurringBill.amountMinor <= 0) {
-      alert('Please enter a valid amount for this recurring bill.');
+      alert('Please enter a valid recurring bill amount.');
       return;
     }
 
@@ -315,58 +363,38 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
         currency: currentCurrency.code,
         dueDateLocal: previewRecurringBill.dueDateLocal || getTodayLocalDateString(),
         frequency: previewRecurringBill.frequency || 'monthly',
-        categoryId:
-          previewRecurringBill.categoryId ||
-          (categories.find((c) => c.type === 'expense')?.id || 'cat_utilities'),
+        categoryId: previewRecurringBill.categoryId || 'cat_utilities',
         isPaid: false,
-        note: `Voice Recurring Bill: ${manualTranscript}`,
       });
 
       await refreshAllData();
       setIsSaving(false);
-      const billAmountStr = (previewRecurringBill.amountMinor / 100).toLocaleString();
-      const msg = `Saved recurring ${previewRecurringBill.frequency} bill "${previewRecurringBill.name}" of ${currencySymbol}${billAmountStr}!`;
+      const amtStr = (previewRecurringBill.amountMinor / 100).toLocaleString();
+      const msg = `Saved recurring monthly bill for "${previewRecurringBill.name}" (${currencySymbol}${amtStr})!`;
       setSuccessMessage(msg);
       speechEngine.speak(msg);
       onTransactionSaved();
 
       setTimeout(() => {
-        handleCancel();
-      }, 1500);
+        handleCloseModal();
+      }, 1400);
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to save recurring bill: ${err.message}`);
     }
   };
 
-  // 5. Savings Goal Editor
+  // 6. Savings Edit
   const handleSaveSavingsEdit = async () => {
-    if (!previewSavingsEdit) return;
-    if (!previewSavingsEdit.newTargetMinor || previewSavingsEdit.newTargetMinor <= 0) {
-      alert('Please enter a valid target amount.');
-      return;
-    }
+    if (!previewSavingsEdit || isSaving) return;
     const targetGoalId = previewSavingsEdit.goalId || (savingsGoals.length > 0 ? savingsGoals[0].id : null);
-    if (!targetGoalId) {
-      alert('Please select a target goal to edit.');
-      return;
-    }
+    if (!targetGoalId) return;
     const goal = savingsGoals.find((g) => g.id === targetGoalId);
-    if (!goal) {
-      alert('Goal not found.');
-      return;
-    }
+    if (!goal || !previewSavingsEdit.newTargetMinor) return;
 
     try {
       setIsSaving(true);
-      await saveSavingsGoal(
-        {
-          ...goal,
-          targetMinor: previewSavingsEdit.newTargetMinor,
-        },
-        goal.id
-      );
-
+      await saveSavingsGoal({ ...goal, targetMinor: previewSavingsEdit.newTargetMinor }, goal.id);
       await refreshAllData();
       setIsSaving(false);
       const targetStr = (previewSavingsEdit.newTargetMinor / 100).toLocaleString();
@@ -374,29 +402,20 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setSuccessMessage(msg);
       speechEngine.speak(msg);
       onTransactionSaved();
-
-      setTimeout(() => {
-        handleCancel();
-      }, 1500);
+      setTimeout(() => { handleCloseModal(); }, 1400);
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to update goal: ${err.message}`);
     }
   };
 
-  // 6. Savings Goal Deleter (with confirmation)
+  // 7. Savings Delete
   const handleConfirmDeleteSavingsGoal = async () => {
-    if (!previewSavingsDelete) return;
+    if (!previewSavingsDelete || isSaving) return;
     const targetGoalId = previewSavingsDelete.goalId || (savingsGoals.length > 0 ? savingsGoals[0].id : null);
-    if (!targetGoalId) {
-      alert('Please select a target goal to delete.');
-      return;
-    }
+    if (!targetGoalId) return;
     const goal = savingsGoals.find((g) => g.id === targetGoalId);
-    if (!goal) {
-      alert('Goal not found.');
-      return;
-    }
+    if (!goal) return;
 
     try {
       setIsSaving(true);
@@ -407,46 +426,20 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setSuccessMessage(msg);
       speechEngine.speak(msg);
       onTransactionSaved();
-
-      setTimeout(() => {
-        handleCancel();
-      }, 1500);
+      setTimeout(() => { handleCloseModal(); }, 1400);
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to delete goal: ${err.message}`);
     }
   };
 
-  // 7. Show Savings History
-  const handleShowSavingsHistory = () => {
-    if (!previewSavingsHistory) return;
-    const targetGoalId = previewSavingsHistory.goalId || (savingsGoals.length > 0 ? savingsGoals[0].id : null);
-    if (!targetGoalId) {
-      alert('Goal not found.');
-      return;
-    }
-    const goal = savingsGoals.find((g) => g.id === targetGoalId);
-    if (!goal) {
-      alert('Goal not found.');
-      return;
-    }
-    handleCancel();
-    openSavingsDetailsModal(goal);
-  };
-
-  // 8. Record Bill Payment
+  // 8. Bill Payment
   const handleSaveBillPayment = async () => {
-    if (!previewBillPayment) return;
+    if (!previewBillPayment || isSaving) return;
     const targetBillId = previewBillPayment.billId || (bills.length > 0 ? bills[0].id : null);
-    if (!targetBillId) {
-      alert('Please select a bill to record payment for.');
-      return;
-    }
+    if (!targetBillId) return;
     const bill = bills.find((b) => b.id === targetBillId);
-    if (!bill) {
-      alert('Bill not found.');
-      return;
-    }
+    if (!bill) return;
 
     try {
       setIsSaving(true);
@@ -457,10 +450,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setSuccessMessage(msg);
       speechEngine.speak(msg);
       onTransactionSaved();
-
-      setTimeout(() => {
-        handleCancel();
-      }, 1500);
+      setTimeout(() => { handleCloseModal(); }, 1400);
     } catch (err: any) {
       setIsSaving(false);
       alert(`Failed to record bill payment: ${err.message}`);
@@ -468,373 +458,418 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   };
 
   return (
-    <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && handleCancel()}>
+    <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && handleCloseModal()}>
       <div
         className="modal-content"
         style={{
-          maxWidth: '580px',
-          width: '100%',
-          maxHeight: '90vh',
+          maxWidth: '560px',
+          width: '95%',
+          maxHeight: 'min(90vh, 620px)',
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: '#FFFFFF',
-          borderRadius: '24px',
+          borderRadius: '20px',
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.25)',
           overflow: 'hidden',
           border: '1px solid var(--border-color)',
         }}
       >
-        {/* Modal Header */}
+        {/* Compact Header */}
         <div
           style={{
             background: 'linear-gradient(135deg, #4338CA 0%, #5B46E5 50%, #6366F1 100%)',
-            padding: '20px 24px',
+            padding: '12px 20px',
             color: '#FFFFFF',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            flexShrink: 0,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
               style={{
-                padding: '10px',
+                padding: '6px',
                 backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                borderRadius: '16px',
-                backdropFilter: 'blur(8px)',
+                borderRadius: '10px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <Sparkles size={22} color="#C7D2FE" />
+              <Sparkles size={18} color="#C7D2FE" />
             </div>
             <div>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#FFFFFF', margin: 0, lineHeight: 1.2 }}>
-                Offline Voice Assistant
-              </h2>
-              <p style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.85)', margin: 0, fontWeight: 500 }}>
+              <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.2 }}>
+                SpendMic Offline Voice Assistant
+              </div>
+              <div style={{ fontSize: '0.6875rem', color: 'rgba(255, 255, 255, 0.85)', fontWeight: 500 }}>
                 100% On-Device Neural Speech Recognition
-              </p>
+              </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <button
               onClick={() => speechEngine.toggleMute()}
               style={{
-                padding: '8px',
+                padding: '6px',
                 color: '#FFFFFF',
-                borderRadius: '10px',
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(255, 255, 255, 0.12)',
                 cursor: 'pointer',
               }}
               title={engineState.isMuted ? 'Unmute Audio Response' : 'Mute Audio Response'}
             >
-              {engineState.isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+              {engineState.isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
             </button>
             <button
-              onClick={handleCancel}
+              onClick={handleCloseModal}
               style={{
-                padding: '8px',
+                padding: '6px',
                 color: '#FFFFFF',
-                borderRadius: '10px',
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(255, 255, 255, 0.12)',
                 cursor: 'pointer',
               }}
             >
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
         </div>
 
-        {/* Modal Scrollable Body */}
-        <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* Automatic Model Status Banner (No separate Download button) */}
-          <div
-            style={{
-              padding: '16px',
-              backgroundColor: 'var(--surface-subtle)',
-              borderRadius: '16px',
-              border: '1px solid var(--border-color)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {engineState.status === 'ready' ? (
-                  <CheckCircle size={20} color="#10B981" />
-                ) : engineState.status === 'preparing' || engineState.status === 'downloading' ? (
-                  <Sparkles size={20} color="#5B46E5" className="voice-sparkle-anim" />
-                ) : (
-                  <AlertCircle size={20} color="#EF4444" />
-                )}
-                <div>
-                  <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--ink-primary)' }}>
-                    {engineState.status === 'ready'
-                      ? 'Offline voice ready'
-                      : engineState.status === 'preparing' || engineState.status === 'downloading'
-                      ? 'Preparing offline voice...'
-                      : 'Setup incomplete'}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--ink-secondary)', fontWeight: 500 }}>
-                    {engineState.status === 'ready'
-                      ? 'Whisper Neural Model Loaded • 100% On-Device & Private'
-                      : engineState.statusMessage}
-                  </div>
+        {/* Modal Viewport Body — Fits completely without unnecessary scrolling */}
+        <div
+          style={{
+            padding: '14px 18px',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            overflowY: 'auto',
+          }}
+        >
+          {/* Status Message / Success Toast */}
+          {successMessage && (
+            <div
+              style={{
+                padding: '10px 14px',
+                backgroundColor: 'var(--positive-bg)',
+                border: '1px solid var(--positive-border)',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                color: 'var(--positive-emerald)',
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                flexShrink: 0,
+              }}
+            >
+              <CheckCircle size={16} color="#10B981" />
+              <span>{successMessage}</span>
+            </div>
+          )}
+
+          {/* Clarification Alert (Section 5 & 11) */}
+          {clarificationPrompt && (
+            <div
+              style={{
+                padding: '10px 14px',
+                backgroundColor: 'var(--warning-bg)',
+                border: '1px solid var(--warning-border)',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                flexShrink: 0,
+              }}
+            >
+              <AlertCircle size={18} color="#D97706" style={{ flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', color: '#D97706' }}>
+                  Clarification Required
+                </div>
+                <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--ink-primary)' }}>
+                  {clarificationPrompt}
                 </div>
               </div>
-
-              {engineState.status === 'error' && (
-                <Button variant="secondary" size="sm" onClick={() => speechEngine.retrySetup()}>
-                  Retry Setup
-                </Button>
-              )}
             </div>
+          )}
 
-            {/* Preparation / Loading Progress Bar */}
-            {(engineState.status === 'preparing' || engineState.status === 'downloading') && (
-              <div style={{ marginTop: '12px', width: '100%', backgroundColor: '#E2E8F0', borderRadius: '999px', height: '6px', overflow: 'hidden' }}>
-                <div
-                  style={{
-                    backgroundColor: 'var(--primary-brand)',
-                    height: '100%',
-                    width: `${Math.max(10, engineState.downloadProgress)}%`,
-                    transition: 'width 0.3s ease',
-                  }}
-                />
+          {/* Q&A Query Answer (Section 4 & 7) */}
+          {queryResponse && (
+            <div
+              style={{
+                padding: '12px 14px',
+                backgroundColor: 'var(--primary-subtle)',
+                border: '1px solid var(--primary-border)',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                flexShrink: 0,
+              }}
+            >
+              <Sparkles size={18} color="#5B46E5" style={{ flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', color: '#5B46E5' }}>
+                  Financial Insights
+                </div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-primary)' }}>
+                  {queryResponse}
+                </div>
               </div>
-            )}
-          </div>
-
-          {/* Microphone Recording Control */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '12px 0' }}>
-            {engineState.status === 'listening' ? (
-              <button
-                onClick={handleStopListening}
-                style={{
-                  width: '84px',
-                  height: '84px',
-                  borderRadius: '50%',
-                  backgroundColor: '#EF4444',
-                  color: '#FFFFFF',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 8px 26px rgba(239, 68, 68, 0.45)',
-                  animation: 'pulse 1.5s infinite',
-                  cursor: 'pointer',
-                  border: '3px solid #FCA5A5',
-                }}
-                title="Listening... Tap to stop"
-              >
-                <Square size={30} style={{ fill: '#FFFFFF' }} />
-              </button>
-            ) : engineState.status === 'processing' ? (
-              <div
-                style={{
-                  width: '84px',
-                  height: '84px',
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #7928CA 0%, #4F46E5 100%)',
-                  color: '#FFFFFF',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 8px 26px rgba(79, 70, 229, 0.45)',
-                  border: '3px solid rgba(255, 255, 255, 0.8)',
-                }}
-                title="Processing speech on-device..."
-              >
-                <Loader2 size={36} style={{ animation: 'spin 1s linear infinite' }} />
-              </div>
-            ) : (
-              <button
-                onClick={handleStartListening}
-                disabled={engineState.status !== 'ready'}
-                style={{
-                  width: '84px',
-                  height: '84px',
-                  borderRadius: '50%',
-                  background:
-                    engineState.status === 'ready'
-                      ? 'linear-gradient(135deg, #FF2E93 0%, #7928CA 50%, #4F46E5 100%)'
-                      : 'var(--border-color)',
-                  color: engineState.status === 'ready' ? '#FFFFFF' : 'var(--ink-muted)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow:
-                    engineState.status === 'ready'
-                      ? '0 8px 26px rgba(124, 58, 237, 0.45)'
-                      : 'none',
-                  transition: 'all 0.2s ease',
-                  cursor: engineState.status === 'ready' ? 'pointer' : 'not-allowed',
-                  opacity: engineState.status === 'ready' ? 1 : 0.65,
-                  border:
-                    engineState.status === 'ready'
-                      ? '3px solid rgba(255, 255, 255, 0.8)'
-                      : '3px solid var(--border-color)',
-                }}
-                title={engineState.status === 'ready' ? 'Tap Microphone to Speak' : 'Preparing offline speech engine...'}
-              >
-                <Mic size={34} />
-              </button>
-            )}
-
-            <div style={{ textAlign: 'center', marginTop: '12px' }}>
-              <div
-                style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  color:
-                    engineState.status === 'listening'
-                      ? '#EF4444'
-                      : engineState.status === 'processing'
-                      ? 'var(--primary-brand)'
-                      : engineState.status === 'ready'
-                      ? 'var(--primary-brand)'
-                      : 'var(--ink-muted)',
-                }}
-              >
-                {engineState.status === 'listening'
-                  ? '🔴 Recording... Tap red button when finished'
-                  : engineState.status === 'processing'
-                  ? '⚡ Processing speech on-device...'
-                  : engineState.status === 'ready'
-                  ? 'Tap Microphone to Speak'
-                  : 'Preparing Offline Voice Engine...'}
-              </div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--ink-secondary)', marginTop: '4px' }}>
-                Supports Income, Expenses, Savings Goals, & Recurring Bills
-              </p>
             </div>
-          </div>
+          )}
 
-
-          {/* "What can I say?" Section */}
-          <div
-            style={{
-              backgroundColor: 'var(--surface-subtle)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '16px',
-              padding: '14px 16px',
-            }}
-          >
+          {/* TOP BAR / CONTROL STRIP (When active content is present) */}
+          {hasActiveContent ? (
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                marginBottom: '10px',
+                padding: '8px 12px',
+                backgroundColor: 'var(--surface-subtle)',
+                borderRadius: '12px',
+                border: '1px solid var(--border-color)',
+                flexShrink: 0,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--ink-primary)' }}>
-                <HelpCircle size={15} color="#5B46E5" />
-                <span>What can I say?</span>
-              </div>
-              <span style={{ fontSize: '0.6875rem', color: 'var(--ink-muted)' }}>Tap example to test</span>
-            </div>
-
-            {/* Category Pills */}
-            <div
-              style={{
-                display: 'flex',
-                gap: '6px',
-                overflowX: 'auto',
-                paddingBottom: '8px',
-                marginBottom: '10px',
-              }}
-            >
-              {VOICE_HELP_COMMANDS.map((cat, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setActiveHelpCategory(idx)}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '20px',
-                    fontSize: '0.6875rem',
-                    fontWeight: activeHelpCategory === idx ? 700 : 500,
-                    backgroundColor: activeHelpCategory === idx ? '#4F46E5' : 'var(--surface-card)',
-                    color: activeHelpCategory === idx ? '#FFFFFF' : 'var(--ink-secondary)',
-                    border: '1px solid ' + (activeHelpCategory === idx ? '#4F46E5' : 'var(--border-color)'),
-                    whiteSpace: 'nowrap',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {cat.title}
-                </button>
-              ))}
-            </div>
-
-            {/* Examples for active category */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {VOICE_HELP_COMMANDS[activeHelpCategory]?.examples.map((ex, exIdx) => {
-                const uniqueKey = `${activeHelpCategory}-${exIdx}`;
-                return (
-                  <div
-                    key={exIdx}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {engineState.status === 'listening' ? (
+                  <button
+                    onClick={handleStopListening}
                     style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '50%',
+                      backgroundColor: '#EF4444',
+                      color: '#FFFFFF',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'space-between',
-                      backgroundColor: 'var(--surface-card)',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '8px',
-                      padding: '6px 10px',
-                      fontSize: '0.75rem',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      border: '2px solid #FCA5A5',
+                      animation: 'pulse 1.5s infinite',
+                    }}
+                    title="Listening... Tap to stop"
+                  >
+                    <Square size={14} style={{ fill: '#FFFFFF' }} />
+                  </button>
+                ) : engineState.status === 'processing' ? (
+                  <div
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #7928CA 0%, #4F46E5 100%)',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                     }}
                   >
+                    <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleStartListening}
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #FF2E93 0%, #7928CA 50%, #4F46E5 100%)',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      border: 'none',
+                    }}
+                    title="Tap to speak correction or follow-up"
+                  >
+                    <Mic size={16} />
+                  </button>
+                )}
+
+                <div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--ink-primary)' }}>
+                    {engineState.status === 'listening'
+                      ? 'Listening to speech...'
+                      : engineState.status === 'processing'
+                      ? 'Processing audio on-device...'
+                      : 'Voice Ready (Tap mic to speak)'}
+                  </div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--ink-muted)' }}>
+                    Speak corrections or edit fields below
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <Button variant="ghost" size="sm" onClick={handleStartListening}>
+                  <RefreshCw size={13} style={{ marginRight: '4px' }} />
+                  Retry
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* IDLE MODE: Friendly centered microphone & Help commands */
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
+              {/* Mic Button */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '6px' }}>
+                {engineState.status === 'listening' ? (
+                  <button
+                    onClick={handleStopListening}
+                    style={{
+                      width: '72px',
+                      height: '72px',
+                      borderRadius: '50%',
+                      backgroundColor: '#EF4444',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 8px 24px rgba(239, 68, 68, 0.45)',
+                      animation: 'pulse 1.5s infinite',
+                      cursor: 'pointer',
+                      border: '3px solid #FCA5A5',
+                    }}
+                  >
+                    <Square size={26} style={{ fill: '#FFFFFF' }} />
+                  </button>
+                ) : engineState.status === 'processing' ? (
+                  <div
+                    style={{
+                      width: '72px',
+                      height: '72px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #7928CA 0%, #4F46E5 100%)',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 8px 24px rgba(79, 70, 229, 0.45)',
+                    }}
+                  >
+                    <Loader2 size={30} style={{ animation: 'spin 1s linear infinite' }} />
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleStartListening}
+                    disabled={engineState.status !== 'ready' && engineState.status !== 'unloaded'}
+                    style={{
+                      width: '72px',
+                      height: '72px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #FF2E93 0%, #7928CA 50%, #4F46E5 100%)',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 8px 24px rgba(124, 58, 237, 0.45)',
+                      cursor: 'pointer',
+                      border: '3px solid rgba(255, 255, 255, 0.9)',
+                    }}
+                  >
+                    <Mic size={30} />
+                  </button>
+                )}
+
+                <div style={{ textAlign: 'center', marginTop: '8px' }}>
+                  <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--primary-brand)' }}>
+                    {engineState.status === 'listening' ? 'Recording... Tap when finished' : 'Tap Microphone to Speak'}
+                  </div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--ink-secondary)' }}>
+                    Supports English, Hindi, and Hinglish financial commands
+                  </div>
+                </div>
+              </div>
+
+              {/* What can I say pill grid */}
+              <div
+                style={{
+                  backgroundColor: 'var(--surface-subtle)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '14px',
+                  padding: '10px 14px',
+                  width: '100%',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', fontWeight: 700 }}>
+                    <HelpCircle size={13} color="#5B46E5" />
+                    <span>What can I say?</span>
+                  </div>
+                  <span style={{ fontSize: '0.6875rem', color: 'var(--ink-muted)' }}>Tap example to test</span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '6px', marginBottom: '6px' }}>
+                  {VOICE_HELP_COMMANDS.map((cat, idx) => (
                     <button
+                      key={idx}
                       type="button"
-                      onClick={() => handleSampleClick(ex)}
+                      onClick={() => setActiveHelpCategory(idx)}
                       style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--ink-primary)',
-                        textAlign: 'left',
+                        padding: '3px 8px',
+                        borderRadius: '16px',
+                        fontSize: '0.6875rem',
+                        fontWeight: activeHelpCategory === idx ? 700 : 500,
+                        backgroundColor: activeHelpCategory === idx ? '#4F46E5' : 'var(--surface-card)',
+                        color: activeHelpCategory === idx ? '#FFFFFF' : 'var(--ink-secondary)',
+                        border: '1px solid ' + (activeHelpCategory === idx ? '#4F46E5' : 'var(--border-color)'),
+                        whiteSpace: 'nowrap',
                         cursor: 'pointer',
-                        padding: 0,
-                        flex: 1,
-                        fontWeight: 500,
                       }}
                     >
-                      "{ex}"
+                      {cat.title}
                     </button>
-                    <button
-                      type="button"
-                      title="Copy example"
-                      onClick={() => {
-                        navigator.clipboard?.writeText(ex);
-                        setCopiedKey(uniqueKey);
-                        setTimeout(() => setCopiedKey(null), 1500);
-                      }}
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  {VOICE_HELP_COMMANDS[activeHelpCategory]?.examples.slice(0, 2).map((ex, exIdx) => (
+                    <div
+                      key={exIdx}
                       style={{
-                        background: 'none',
-                        border: 'none',
-                        color: copiedKey === uniqueKey ? 'var(--positive-emerald)' : 'var(--ink-muted)',
-                        cursor: 'pointer',
-                        padding: '2px 4px',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '2px',
-                        fontSize: '0.6875rem',
+                        justifyContent: 'space-between',
+                        backgroundColor: 'var(--surface-card)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        padding: '5px 8px',
+                        fontSize: '0.75rem',
                       }}
                     >
-                      {copiedKey === uniqueKey ? <Check size={12} /> : <Copy size={12} />}
-                      <span>{copiedKey === uniqueKey ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
-                );
-              })}
+                      <button
+                        type="button"
+                        onClick={() => handleSampleClick(ex)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--ink-primary)',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          padding: 0,
+                          flex: 1,
+                          fontWeight: 500,
+                        }}
+                      >
+                        "{ex}"
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Editable Transcript Input Field */}
-          <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--ink-muted)', marginBottom: '6px' }}>
+          {/* SPOKEN TRANSCRIPT INPUT (Always rendered for testability & manual edits) */}
+          <div style={{ flexShrink: 0 }}>
+            <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--ink-muted)', marginBottom: '4px' }}>
               Spoken Transcript (Editable)
             </label>
             <input
@@ -845,131 +880,219 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
               className="form-input"
               style={{
                 width: '100%',
-                padding: '12px 16px',
-                borderRadius: '14px',
-                fontSize: '0.875rem',
+                padding: '8px 12px',
+                borderRadius: '10px',
+                fontSize: '0.8125rem',
                 fontWeight: 500,
               }}
             />
           </div>
 
-          {/* Success Banner */}
-          {successMessage && (
-            <div
-              style={{
-                padding: '14px 16px',
-                backgroundColor: 'var(--positive-bg)',
-                border: '1px solid var(--positive-border)',
-                borderRadius: '14px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                color: 'var(--positive-emerald)',
-                fontSize: '0.875rem',
-                fontWeight: 600,
-              }}
-            >
-              <CheckCircle size={18} color="#10B981" />
-              <span>{successMessage}</span>
+          {/* REVIEW PANELS (Compact, cleanly fitted) */}
+
+          {/* A. Transactions Review (Expense / Income) */}
+          {previewTransactions.length > 0 && !queryResponse && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--ink-muted)' }}>
+                Recognized Entry Preview ({previewTransactions.length})
+              </div>
+
+              {previewTransactions.map((tx, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    padding: '10px 12px',
+                    backgroundColor: 'var(--surface-subtle)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span
+                        style={{
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          fontSize: '0.6875rem',
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          backgroundColor: tx.type === 'income' ? '#DCFCE7' : '#FEE2E2',
+                          color: tx.type === 'income' ? '#15803D' : '#B91C1C',
+                        }}
+                      >
+                        {tx.type}
+                      </span>
+                      {previewTransactions.length > 1 && (
+                        <span style={{ fontSize: '0.6875rem', color: 'var(--ink-muted)' }}>
+                          Item #{idx + 1}
+                        </span>
+                      )}
+                    </div>
+
+                    <input
+                      type="date"
+                      value={tx.dateLocal}
+                      onChange={(e) => {
+                        const updated = [...previewTransactions];
+                        updated[idx] = { ...updated[idx], dateLocal: e.target.value };
+                        setPreviewTransactions(updated);
+                      }}
+                      className="form-input"
+                      style={{ padding: '4px 8px', fontSize: '0.75rem', width: 'auto' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    {/* Amount */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '2px' }}>
+                        Amount ({currencySymbol})
+                      </label>
+                      <input
+                        type="number"
+                        value={tx.amountMinor ? tx.amountMinor / 100 : ''}
+                        placeholder="Amount"
+                        onChange={(e) => {
+                          const updated = [...previewTransactions];
+                          updated[idx] = {
+                            ...updated[idx],
+                            amountMinor: Math.round(parseFloat(e.target.value || '0') * 100),
+                            isAmbiguous: false,
+                          };
+                          setPreviewTransactions(updated);
+                        }}
+                        className="form-input"
+                        style={{ padding: '6px 10px', fontSize: '0.875rem', fontWeight: 700 }}
+                      />
+                    </div>
+
+                    {/* Category */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '2px' }}>
+                        Category
+                      </label>
+                      <select
+                        value={resolveTransactionCategory(tx.categoryId, categories, tx.note || manualTranscript, tx.type)?.id || tx.categoryId || ''}
+                        onChange={(e) => {
+                          const updated = [...previewTransactions];
+                          updated[idx] = { ...updated[idx], categoryId: e.target.value };
+                          setPreviewTransactions(updated);
+                        }}
+                        className="form-select"
+                        style={{ padding: '6px 10px', fontSize: '0.8125rem', fontWeight: 600 }}
+                      >
+                        {categories
+                          .filter((c) => c.type === tx.type)
+                          .map((cat) => (
+                            <option key={cat.id} value={cat.id}>
+                              {cat.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
-          {/* Clarification / Follow-up Question Card */}
-          {clarificationPrompt && (
+          {/* B. Budget Setting Review (Section 4) */}
+          {previewBudget && !queryResponse && (
             <div
               style={{
-                padding: '16px',
-                backgroundColor: 'var(--warning-bg)',
-                border: '1px solid var(--warning-border)',
-                borderRadius: '16px',
+                padding: '10px 12px',
+                backgroundColor: 'var(--surface-subtle)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '12px',
                 display: 'flex',
-                alignItems: 'flex-start',
-                gap: '12px',
+                flexDirection: 'column',
+                gap: '8px',
+                flexShrink: 0,
               }}
             >
-              <AlertCircle size={20} color="#D97706" style={{ marginTop: '2px', flexShrink: 0 }} />
-              <div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#D97706', marginBottom: '4px' }}>
-                  Clarification Needed
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Target size={16} color="#4F46E5" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4F46E5', textTransform: 'uppercase' }}>
+                  Proposed Action: Set Monthly Budget
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '2px' }}>
+                    Monthly Limit ({currencySymbol})
+                  </label>
+                  <input
+                    type="number"
+                    value={previewBudget.monthlyLimitMinor ? previewBudget.monthlyLimitMinor / 100 : ''}
+                    placeholder="e.g. 5000"
+                    onChange={(e) =>
+                      setPreviewBudget({
+                        ...previewBudget,
+                        monthlyLimitMinor: Math.round(parseFloat(e.target.value || '0') * 100),
+                      })
+                    }
+                    className="form-input"
+                    style={{ padding: '6px 10px', fontSize: '0.875rem', fontWeight: 700 }}
+                  />
                 </div>
-                <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--ink-primary)' }}>
-                  {clarificationPrompt}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--ink-secondary)', marginTop: '4px' }}>
-                  You can specify the missing detail in the preview inputs below or update your spoken command above.
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '2px' }}>
+                    Category
+                  </label>
+                  <select
+                    value={previewBudget.categoryId || ''}
+                    onChange={(e) =>
+                      setPreviewBudget({
+                        ...previewBudget,
+                        categoryId: e.target.value || null,
+                      })
+                    }
+                    className="form-select"
+                    style={{ padding: '6px 10px', fontSize: '0.8125rem', fontWeight: 600 }}
+                  >
+                    <option value="">Overall Monthly Budget</option>
+                    {categories
+                      .filter((c) => c.type === 'expense')
+                      .map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                  </select>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Financial Q&A Answer Card */}
-          {queryResponse && (
-            <div
-              style={{
-                padding: '16px',
-                backgroundColor: 'var(--primary-subtle)',
-                border: '1px solid var(--primary-border)',
-                borderRadius: '16px',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '12px',
-              }}
-            >
-              <Sparkles size={20} color="#5B46E5" style={{ marginTop: '2px', flexShrink: 0 }} />
-              <div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#5B46E5', marginBottom: '4px' }}>
-                  Local Financial Answer
-                </div>
-                <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--ink-primary)' }}>{queryResponse}</div>
-              </div>
-            </div>
-          )}
-
-          {/* Active Intent Indicator */}
-          {activeIntent && !queryResponse && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--ink-muted)' }}>
-                Detected Intent:
-              </span>
-              <span
-                style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  backgroundColor: 'var(--primary-subtle)',
-                  padding: '3px 8px',
-                  borderRadius: '6px',
-                  color: 'var(--primary-brand)',
-                  border: '1px solid var(--primary-border)',
-                }}
-              >
-                {activeIntent}
-              </span>
-            </div>
-          )}
-
-          {/* 1. PREVIEW: Create Savings Goal */}
+          {/* C. Savings Goal Review */}
           {previewSavingsGoal && !queryResponse && (
             <div
               style={{
-                padding: '16px',
+                padding: '10px 12px',
                 backgroundColor: 'var(--surface-subtle)',
                 border: '1px solid var(--border-color)',
-                borderRadius: '16px',
+                borderRadius: '12px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '14px',
+                gap: '8px',
+                flexShrink: 0,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Target size={18} color="#10B981" />
-                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Target size={16} color="#10B981" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#10B981', textTransform: 'uppercase' }}>
                   Action Detected: Create Savings Goal
                 </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '2px' }}>
                     Goal Name
                   </label>
                   <input
@@ -977,12 +1100,12 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                     value={previewSavingsGoal.name}
                     onChange={(e) => setPreviewSavingsGoal({ ...previewSavingsGoal, name: e.target.value })}
                     className="form-input"
-                    style={{ padding: '8px 12px', fontWeight: 600 }}
+                    style={{ padding: '6px 10px', fontSize: '0.8125rem', fontWeight: 600 }}
                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '2px' }}>
                     Target Amount ({currencySymbol})
                   </label>
                   <input
@@ -996,66 +1119,51 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                       })
                     }
                     className="form-input"
-                    style={{ padding: '8px 12px', fontWeight: 700 }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                    Target Date (Optional)
-                  </label>
-                  <input
-                    type="date"
-                    value={previewSavingsGoal.targetDateLocal || ''}
-                    onChange={(e) => setPreviewSavingsGoal({ ...previewSavingsGoal, targetDateLocal: e.target.value })}
-                    className="form-input"
-                    style={{ padding: '8px 12px' }}
+                    style={{ padding: '6px 10px', fontSize: '0.875rem', fontWeight: 700 }}
                   />
                 </div>
               </div>
             </div>
           )}
 
-          {/* 2. PREVIEW: Add Savings Contribution */}
+          {/* D. Savings Contribution Review */}
           {previewSavingsContribution && !queryResponse && (
             <div
               style={{
-                padding: '16px',
+                padding: '10px 12px',
                 backgroundColor: 'var(--surface-subtle)',
                 border: '1px solid var(--border-color)',
-                borderRadius: '16px',
+                borderRadius: '12px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '14px',
+                gap: '8px',
+                flexShrink: 0,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <PiggyBank size={18} color="#3B82F6" />
-                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#3B82F6', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <PiggyBank size={16} color="#3B82F6" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#3B82F6', textTransform: 'uppercase' }}>
                   Action Detected: Add Savings Contribution
                 </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                    Target Savings Goal
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '2px' }}>
+                    Target Goal
                   </label>
                   {savingsGoals.length > 0 ? (
                     <select
                       value={previewSavingsContribution.matchedGoalId || savingsGoals[0].id}
                       onChange={(e) =>
-                        setPreviewSavingsContribution({
-                          ...previewSavingsContribution,
-                          matchedGoalId: e.target.value,
-                        })
+                        setPreviewSavingsContribution({ ...previewSavingsContribution, matchedGoalId: e.target.value })
                       }
                       className="form-select"
-                      style={{ padding: '8px 12px', fontWeight: 600 }}
+                      style={{ padding: '6px 10px', fontSize: '0.8125rem', fontWeight: 600 }}
                     >
                       {savingsGoals.map((g) => (
                         <option key={g.id} value={g.id}>
-                          {g.name} (Saved: {currencySymbol}{(g.currentSavedMinor / 100).toLocaleString()})
+                          {g.name}
                         </option>
                       ))}
                     </select>
@@ -1064,21 +1172,19 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                       type="text"
                       value={previewSavingsContribution.goalNameOrId}
                       readOnly
-                      placeholder="No existing goal found"
                       className="form-input"
-                      style={{ padding: '8px 12px', opacity: 0.7 }}
+                      style={{ padding: '6px 10px', fontSize: '0.8125rem' }}
                     />
                   )}
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                    Contribution Amount ({currencySymbol})
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '2px' }}>
+                    Amount ({currencySymbol})
                   </label>
                   <input
                     type="number"
                     value={previewSavingsContribution.amountMinor ? previewSavingsContribution.amountMinor / 100 : ''}
-                    placeholder="e.g. 500"
                     onChange={(e) =>
                       setPreviewSavingsContribution({
                         ...previewSavingsContribution,
@@ -1086,63 +1192,37 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                       })
                     }
                     className="form-input"
-                    style={{ padding: '8px 12px', fontWeight: 700 }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    value={previewSavingsContribution.dateLocal}
-                    onChange={(e) => setPreviewSavingsContribution({ ...previewSavingsContribution, dateLocal: e.target.value })}
-                    className="form-input"
-                    style={{ padding: '8px 12px' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                    Note (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={previewSavingsContribution.note || ''}
-                    placeholder="e.g. Monthly deposit"
-                    onChange={(e) => setPreviewSavingsContribution({ ...previewSavingsContribution, note: e.target.value })}
-                    className="form-input"
-                    style={{ padding: '8px 12px' }}
+                    style={{ padding: '6px 10px', fontSize: '0.875rem', fontWeight: 700 }}
                   />
                 </div>
               </div>
             </div>
           )}
 
-          {/* 3. PREVIEW: Create Recurring Bill */}
+          {/* E. Recurring Bill Review */}
           {previewRecurringBill && !queryResponse && (
             <div
               style={{
-                padding: '16px',
+                padding: '10px 12px',
                 backgroundColor: 'var(--surface-subtle)',
                 border: '1px solid var(--border-color)',
-                borderRadius: '16px',
+                borderRadius: '12px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '14px',
+                gap: '8px',
+                flexShrink: 0,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Repeat size={18} color="#8B5CF6" />
-                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#8B5CF6', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Repeat size={16} color="#7C3AED" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#7C3AED', textTransform: 'uppercase' }}>
                   Action Detected: Create Recurring Bill
                 </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '2px' }}>
                     Bill Name
                   </label>
                   <input
@@ -1150,12 +1230,12 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                     value={previewRecurringBill.name}
                     onChange={(e) => setPreviewRecurringBill({ ...previewRecurringBill, name: e.target.value })}
                     className="form-input"
-                    style={{ padding: '8px 12px', fontWeight: 600 }}
+                    style={{ padding: '6px 10px', fontSize: '0.8125rem', fontWeight: 600 }}
                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '2px' }}>
                     Amount ({currencySymbol})
                   </label>
                   <input
@@ -1169,452 +1249,52 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                       })
                     }
                     className="form-input"
-                    style={{ padding: '8px 12px', fontWeight: 700 }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                    Frequency
-                  </label>
-                  <select
-                    value={previewRecurringBill.frequency}
-                    onChange={(e) =>
-                      setPreviewRecurringBill({
-                        ...previewRecurringBill,
-                        frequency: e.target.value as BillFrequency,
-                      })
-                    }
-                    className="form-select"
-                    style={{ padding: '8px 12px', fontWeight: 600 }}
-                  >
-                    <option value="monthly">Monthly</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="yearly">Yearly</option>
-                    <option value="one_off">One-off</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                    Category
-                  </label>
-                  <select
-                    value={previewRecurringBill.categoryId}
-                    onChange={(e) => setPreviewRecurringBill({ ...previewRecurringBill, categoryId: e.target.value })}
-                    className="form-select"
-                    style={{ padding: '8px 12px', fontWeight: 600 }}
-                  >
-                    {categories
-                      .filter((c) => c.type === 'expense')
-                      .map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                    First Due Date
-                  </label>
-                  <input
-                    type="date"
-                    value={previewRecurringBill.dueDateLocal}
-                    onChange={(e) => setPreviewRecurringBill({ ...previewRecurringBill, dueDateLocal: e.target.value })}
-                    className="form-input"
-                    style={{ padding: '8px 12px' }}
+                    style={{ padding: '6px 10px', fontSize: '0.875rem', fontWeight: 700 }}
                   />
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* 4. PREVIEW: Edit Savings Goal Target */}
-          {previewSavingsEdit && !queryResponse && (
-            <div
-              style={{
-                padding: '16px',
-                backgroundColor: 'var(--surface-subtle)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '16px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '14px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Edit3 size={18} color="#4F46E5" />
-                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#4F46E5', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Action Detected: Edit Savings Goal Target
-                </span>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                    Savings Goal
-                  </label>
-                  {savingsGoals.length > 0 ? (
-                    <select
-                      value={previewSavingsEdit.goalId || savingsGoals[0].id}
-                      onChange={(e) => {
-                        const found = savingsGoals.find((g) => g.id === e.target.value);
-                        setPreviewSavingsEdit({
-                          ...previewSavingsEdit,
-                          goalId: e.target.value,
-                          goalName: found ? found.name : previewSavingsEdit.goalName,
-                        });
-                      }}
-                      className="form-select"
-                      style={{ padding: '8px 12px', fontWeight: 600 }}
-                    >
-                      {savingsGoals.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.name} (Current Target: {currencySymbol}{(g.targetMinor / 100).toLocaleString()})
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      value={previewSavingsEdit.goalName}
-                      readOnly
-                      className="form-input"
-                      style={{ padding: '8px 12px', opacity: 0.7 }}
-                    />
-                  )}
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                    New Target Amount ({currencySymbol})
-                  </label>
-                  <input
-                    type="number"
-                    value={previewSavingsEdit.newTargetMinor ? previewSavingsEdit.newTargetMinor / 100 : ''}
-                    placeholder="e.g. 60000"
-                    onChange={(e) =>
-                      setPreviewSavingsEdit({
-                        ...previewSavingsEdit,
-                        newTargetMinor: Math.round(parseFloat(e.target.value || '0') * 100),
-                      })
-                    }
-                    className="form-input"
-                    style={{ padding: '8px 12px', fontWeight: 700 }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 5. PREVIEW: Delete Savings Goal */}
-          {previewSavingsDelete && !queryResponse && (
-            <div
-              style={{
-                padding: '16px',
-                backgroundColor: 'var(--negative-bg)',
-                border: '1px solid var(--negative-border)',
-                borderRadius: '16px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Trash2 size={18} color="var(--negative-crimson)" />
-                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--negative-crimson)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Confirmation Required: Delete Savings Goal
-                </span>
-              </div>
-
-              <p style={{ fontSize: '0.8125rem', color: 'var(--ink-primary)', margin: 0, lineHeight: 1.5 }}>
-                Are you sure you want to delete savings goal <strong>"{previewSavingsDelete.goalName}"</strong>?
-                This action requires your explicit confirmation before removal.
-              </p>
-            </div>
-          )}
-
-          {/* 6. PREVIEW: Show Savings History */}
-          {previewSavingsHistory && !queryResponse && (
-            <div
-              style={{
-                padding: '16px',
-                backgroundColor: 'var(--surface-subtle)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '16px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <History size={18} color="#059669" />
-                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Action Detected: View Savings Goal History
-                </span>
-              </div>
-
-              <p style={{ fontSize: '0.8125rem', color: 'var(--ink-primary)', margin: 0 }}>
-                View complete deposit history and progress details for <strong>"{previewSavingsHistory.goalName}"</strong>.
-              </p>
-            </div>
-          )}
-
-          {/* 7. PREVIEW: Record Bill Payment */}
-          {previewBillPayment && !queryResponse && (
-            <div
-              style={{
-                padding: '16px',
-                backgroundColor: 'var(--surface-subtle)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '16px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '14px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CreditCard size={18} color="#D97706" />
-                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Action Detected: Record Bill Payment
-                </span>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                    Tracked Bill
-                  </label>
-                  {bills.length > 0 ? (
-                    <select
-                      value={previewBillPayment.billId || bills[0].id}
-                      onChange={(e) => {
-                        const found = bills.find((b) => b.id === e.target.value);
-                        setPreviewBillPayment({
-                          ...previewBillPayment,
-                          billId: e.target.value,
-                          billName: found ? found.name : previewBillPayment.billName,
-                          amountMinor: found ? found.amountMinor : previewBillPayment.amountMinor,
-                        });
-                      }}
-                      className="form-select"
-                      style={{ padding: '8px 12px', fontWeight: 600 }}
-                    >
-                      {bills.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name} ({currencySymbol}{(b.amountMinor / 100).toLocaleString()}{b.isPaid ? ' - Paid' : ''})
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      value={previewBillPayment.billName}
-                      readOnly
-                      className="form-input"
-                      style={{ padding: '8px 12px', opacity: 0.7 }}
-                    />
-                  )}
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                    Payment Amount ({currencySymbol})
-                  </label>
-                  <input
-                    type="number"
-                    value={previewBillPayment.amountMinor ? previewBillPayment.amountMinor / 100 : ''}
-                    placeholder="e.g. 1500"
-                    onChange={(e) =>
-                      setPreviewBillPayment({
-                        ...previewBillPayment,
-                        amountMinor: Math.round(parseFloat(e.target.value || '0') * 100),
-                      })
-                    }
-                    className="form-input"
-                    style={{ padding: '8px 12px', fontWeight: 700 }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 8. PREVIEW: Income / Expense Transactions */}
-          {previewTransactions.length > 0 &&
-            !queryResponse &&
-            !previewSavingsGoal &&
-            !previewSavingsContribution &&
-            !previewSavingsEdit &&
-            !previewSavingsDelete &&
-            !previewSavingsHistory &&
-            !previewBillPayment &&
-            !previewRecurringBill && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--ink-muted)' }}>
-                Recognized Entry Preview ({previewTransactions.length})
-              </div>
-
-              {previewTransactions.map((tx, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    padding: '16px',
-                    backgroundColor: 'var(--surface-subtle)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '16px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px',
-                  }}
-                >
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    {/* Amount */}
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                        Amount ({currencySymbol})
-                      </label>
-                      <input
-                        type="number"
-                        value={tx.amountMinor ? tx.amountMinor / 100 : ''}
-                        onChange={(e) => {
-                          const updated = [...previewTransactions];
-                          updated[idx] = {
-                            ...updated[idx],
-                            amountMinor: Math.round(parseFloat(e.target.value || '0') * 100),
-                          };
-                          setPreviewTransactions(updated);
-                        }}
-                        className="form-input"
-                        style={{ padding: '8px 12px', fontWeight: 700 }}
-                      />
-                    </div>
-
-                    {/* Type */}
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                        Type
-                      </label>
-                      <select
-                        value={tx.type}
-                        onChange={(e) => {
-                          const updated = [...previewTransactions];
-                          updated[idx] = {
-                            ...updated[idx],
-                            type: e.target.value as TransactionType,
-                          };
-                          setPreviewTransactions(updated);
-                        }}
-                        className="form-select"
-                        style={{ padding: '8px 12px', fontWeight: 600 }}
-                      >
-                        <option value="expense">Expense</option>
-                        <option value="income">Income</option>
-                      </select>
-                    </div>
-
-                    {/* Category */}
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                        Category
-                      </label>
-                      <select
-                        value={resolveTransactionCategory(tx.categoryId, categories, tx.note || manualTranscript, tx.type)?.id || tx.categoryId || ''}
-                        onChange={(e) => {
-                          const updated = [...previewTransactions];
-                          updated[idx] = {
-                            ...updated[idx],
-                            categoryId: e.target.value,
-                          };
-                          setPreviewTransactions(updated);
-                        }}
-                        className="form-select"
-                        style={{ padding: '8px 12px', fontWeight: 600 }}
-                      >
-                        {categories
-                          .filter((c) => c.type === tx.type)
-                          .map((cat) => (
-                            <option key={cat.id} value={cat.id}>
-                              {cat.name}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-
-                    {/* Date */}
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                        Date
-                      </label>
-                      <input
-                        type="date"
-                        value={tx.dateLocal}
-                        onChange={(e) => {
-                          const updated = [...previewTransactions];
-                          updated[idx] = {
-                            ...updated[idx],
-                            dateLocal: e.target.value,
-                          };
-                          setPreviewTransactions(updated);
-                        }}
-                        className="form-input"
-                        style={{ padding: '8px 12px' }}
-                      />
-                    </div>
-
-                    {/* Time (Recorded only for Today) */}
-                    {tx.dateLocal === getTodayLocalDateString() && (
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-secondary)', marginBottom: '4px' }}>
-                          Time (Today)
-                        </label>
-                        <input
-                          type="time"
-                          value={tx.timeLocal || getCurrentLocalTimeString()}
-                          onChange={(e) => {
-                            const updated = [...previewTransactions];
-                            updated[idx] = {
-                              ...updated[idx],
-                              timeLocal: e.target.value,
-                            };
-                            setPreviewTransactions(updated);
-                          }}
-                          className="form-input"
-                          style={{ padding: '8px 12px' }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
             </div>
           )}
         </div>
 
-        {/* Modal Footer */}
+        {/* FIXED ACTION FOOTER — ALWAYS VISIBLE WITHOUT SCROLLING (Section 10) */}
         <div
           className="voice-modal-footer"
           style={{
-            padding: '16px 24px',
+            padding: '12px 18px',
             backgroundColor: 'var(--surface-subtle)',
             borderTop: '1px solid var(--border-color)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            flexShrink: 0,
           }}
         >
-          <Button variant="ghost" onClick={handleCancel}>
+          <Button variant="ghost" size="sm" onClick={handleCloseModal}>
             Cancel
           </Button>
 
-          {/* Action-Specific Confirm Buttons */}
+          {/* Action Confirmation Buttons */}
+          {previewBudget && !queryResponse && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSaveBudget}
+              isLoading={isSaving}
+              leftIcon={<Save size={15} />}
+              disabled={!previewBudget.monthlyLimitMinor || previewBudget.monthlyLimitMinor <= 0}
+            >
+              Confirm & Save Budget
+            </Button>
+          )}
+
           {previewSavingsGoal && !queryResponse && (
             <Button
               variant="primary"
+              size="sm"
               onClick={handleSaveSavingsGoal}
               isLoading={isSaving}
-              leftIcon={<Save size={16} />}
+              leftIcon={<Save size={15} />}
               disabled={!previewSavingsGoal.targetMinor || previewSavingsGoal.targetMinor <= 0}
             >
               Confirm & Create Savings Goal
@@ -1624,10 +1304,11 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
           {previewSavingsContribution && !queryResponse && (
             <Button
               variant="primary"
+              size="sm"
               onClick={handleSaveSavingsContribution}
               isLoading={isSaving}
-              leftIcon={<Save size={16} />}
-              disabled={!previewSavingsContribution.amountMinor || previewSavingsContribution.amountMinor <= 0 || !previewSavingsContribution.matchedGoalId}
+              leftIcon={<Save size={15} />}
+              disabled={!previewSavingsContribution.amountMinor || previewSavingsContribution.amountMinor <= 0}
             >
               Confirm & Add Contribution
             </Button>
@@ -1636,9 +1317,10 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
           {previewSavingsEdit && !queryResponse && (
             <Button
               variant="primary"
+              size="sm"
               onClick={handleSaveSavingsEdit}
               isLoading={isSaving}
-              leftIcon={<Save size={16} />}
+              leftIcon={<Save size={15} />}
               disabled={!previewSavingsEdit.newTargetMinor || previewSavingsEdit.newTargetMinor <= 0}
             >
               Confirm & Update Goal Target
@@ -1648,66 +1330,61 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
           {previewSavingsDelete && !queryResponse && (
             <Button
               variant="primary"
+              size="sm"
               onClick={handleConfirmDeleteSavingsGoal}
               isLoading={isSaving}
-              leftIcon={<Trash2 size={16} />}
+              leftIcon={<Trash2 size={15} />}
               style={{ backgroundColor: 'var(--negative-crimson)', borderColor: 'var(--negative-crimson)' }}
             >
               Confirm & Delete Goal
             </Button>
           )}
 
-          {previewSavingsHistory && !queryResponse && (
-            <Button
-              variant="primary"
-              onClick={handleShowSavingsHistory}
-              leftIcon={<History size={16} />}
-            >
-              View Goal History
-            </Button>
-          )}
-
-          {previewBillPayment && !queryResponse && (
-            <Button
-              variant="primary"
-              onClick={handleSaveBillPayment}
-              isLoading={isSaving}
-              leftIcon={<CheckCircle size={16} />}
-            >
-              Confirm Bill Payment
-            </Button>
-          )}
-
           {previewRecurringBill && !queryResponse && (
             <Button
               variant="primary"
+              size="sm"
               onClick={handleSaveRecurringBill}
               isLoading={isSaving}
-              leftIcon={<Save size={16} />}
+              leftIcon={<Save size={15} />}
               disabled={!previewRecurringBill.amountMinor || previewRecurringBill.amountMinor <= 0}
             >
               Confirm & Save Recurring Bill
             </Button>
           )}
 
+          {previewBillPayment && !queryResponse && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSaveBillPayment}
+              isLoading={isSaving}
+              leftIcon={<CheckCircle size={15} />}
+            >
+              Confirm Bill Payment
+            </Button>
+          )}
+
           {previewTransactions.length > 0 &&
             !queryResponse &&
+            !previewBudget &&
             !previewSavingsGoal &&
             !previewSavingsContribution &&
             !previewSavingsEdit &&
             !previewSavingsDelete &&
-            !previewSavingsHistory &&
             !previewBillPayment &&
             !previewRecurringBill && (
-            <Button
-              variant="primary"
-              onClick={handleSaveTransactions}
-              isLoading={isSaving}
-              leftIcon={<Save size={16} />}
-            >
-              Confirm & Save to Account
-            </Button>
-          )}
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSaveTransactions}
+                isLoading={isSaving}
+                leftIcon={<Save size={15} />}
+                disabled={previewTransactions.some((t) => !t.amountMinor || t.isAmbiguous)}
+              >
+                Confirm & Save to Account
+              </Button>
+            )}
         </div>
       </div>
     </div>
