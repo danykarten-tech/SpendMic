@@ -17,7 +17,7 @@ import { useApp } from '../../context/AppContext';
 import { useDeviceProtection } from '../../device-protection';
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isBlocked, isPending } = useDeviceProtection();
+  const { isBlocked, isPending, isUnactivated } = useDeviceProtection();
   const {
     isOffline,
     isRecurringModalOpen,
@@ -50,7 +50,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
     refreshAllData,
   } = useApp();
 
-  if (isBlocked) {
+  if (isBlocked || isUnactivated) {
     return <>{children}</>;
   }
 

@@ -4,6 +4,7 @@ export * from './stateMachine';
 export * from './storage';
 export * from './apiClient';
 export * from './DeviceProtectionContext';
+export * from './ui/DeviceActivationScreen';
 export * from './ui/DeviceBlockedScreen';
 export * from './ui/DeviceReplacementModal';
 export * from './ui/LicenseSettingsSection';

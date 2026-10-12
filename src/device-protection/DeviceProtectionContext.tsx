@@ -13,6 +13,7 @@ interface DeviceProtectionContextType {
   isBlocked: boolean;
   isPending: boolean;
   isTemporaryServerUnavailable: boolean;
+  isUnactivated: boolean;
   lastVerifiedAt: string | null;
   blockedReason?: string;
   activeDevices: RegisteredDevice[];
@@ -187,6 +188,23 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
 
     window.addEventListener('online', handleOnline);
 
+    // Auto-activate via URL query parameter (e.g. ?license=SPM-... or ?key=SPM-...)
+    if (typeof window !== 'undefined') {
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        const urlKey = searchParams.get('license') || searchParams.get('key');
+        if (urlKey && urlKey.trim().length > 0) {
+          const cleanKey = urlKey.trim().toUpperCase();
+          // Remove query param from browser address bar without reloading
+          const newUrl = window.location.pathname + window.location.hash;
+          window.history.replaceState({}, document.title, newUrl);
+          activateLicense(cleanKey);
+        }
+      } catch {
+        // Fallback
+      }
+    }
+
     // Initial check
     if (cache.licenseKey) {
       if (cache.state === 'PENDING_VERIFICATION') {
@@ -205,6 +223,7 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
   const isBlocked = cache.state === 'BLOCKED' || cache.state === 'REPLACEMENT_REQUIRED';
   const isPending = cache.state === 'PENDING_VERIFICATION';
   const isTemporaryServerUnavailable = cache.state === 'TEMPORARY_SERVER_UNAVAILABLE';
+  const isUnactivated = !cache.licenseKey || cache.state === 'UNKNOWN';
 
   return (
     <DeviceProtectionContext.Provider
@@ -217,6 +236,7 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
         isBlocked,
         isPending,
         isTemporaryServerUnavailable,
+        isUnactivated,
         lastVerifiedAt: cache.lastVerifiedAt,
         blockedReason: cache.blockedReason,
         activeDevices: cache.activeDevices || [],

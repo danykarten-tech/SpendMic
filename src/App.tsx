@@ -15,11 +15,15 @@ import { SettingsView } from './views/SettingsView';
 
 import { ITransactionRepository } from './storage/storageRepository';
 
-import { DeviceProtectionProvider, useDeviceProtection, DeviceBlockedScreen } from './device-protection';
+import { DeviceProtectionProvider, useDeviceProtection, DeviceBlockedScreen, DeviceActivationScreen } from './device-protection';
 
 const MainContent: React.FC = () => {
   const { activeTab } = useApp();
-  const { isBlocked } = useDeviceProtection();
+  const { isBlocked, isUnactivated } = useDeviceProtection();
+
+  if (isUnactivated) {
+    return <DeviceActivationScreen />;
+  }
 
   if (isBlocked) {
     return <DeviceBlockedScreen />;
