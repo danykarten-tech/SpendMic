@@ -14,8 +14,10 @@ import { SavingsContributionModal } from '../modals/SavingsContributionModal';
 import { VoiceAssistantModal } from '../voice/VoiceAssistantModal';
 import { NotificationCenterModal } from '../notifications/NotificationCenterModal';
 import { useApp } from '../../context/AppContext';
+import { useDeviceProtection } from '../../device-protection';
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isBlocked, isPending } = useDeviceProtection();
   const {
     isOffline,
     isRecurringModalOpen,
@@ -48,6 +50,10 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
     refreshAllData,
   } = useApp();
 
+  if (isBlocked) {
+    return <>{children}</>;
+  }
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-app)' }}>
       {/* Desktop Sidebar (visible on screens >= 1024px) */}
@@ -58,6 +64,22 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       {/* Main Content Area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <Header />
+
+        {isPending && (
+          <div
+            style={{
+              backgroundColor: 'var(--info-bg, #eff6ff)',
+              borderBottom: '1px solid var(--info-border, #bfdbfe)',
+              padding: '8px 16px',
+              fontSize: '0.8125rem',
+              color: 'var(--info-blue, #1d4ed8)',
+              textAlign: 'center',
+              fontWeight: 500,
+            }}
+          >
+            Device license is pending online server confirmation. All changes remain safely saved locally on this device.
+          </div>
+        )}
 
         {isOffline && (
           <div

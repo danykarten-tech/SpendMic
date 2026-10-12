@@ -15,8 +15,15 @@ import { SettingsView } from './views/SettingsView';
 
 import { ITransactionRepository } from './storage/storageRepository';
 
+import { DeviceProtectionProvider, useDeviceProtection, DeviceBlockedScreen } from './device-protection';
+
 const MainContent: React.FC = () => {
   const { activeTab } = useApp();
+  const { isBlocked } = useDeviceProtection();
+
+  if (isBlocked) {
+    return <DeviceBlockedScreen />;
+  }
 
   switch (activeTab) {
     case 'home':
@@ -45,9 +52,11 @@ export function App({ repository }: { repository?: ITransactionRepository } = {}
     <ErrorBoundary>
       <ToastProvider>
         <AppProvider repository={repository}>
-          <AppShell>
-            <MainContent />
-          </AppShell>
+          <DeviceProtectionProvider>
+            <AppShell>
+              <MainContent />
+            </AppShell>
+          </DeviceProtectionProvider>
         </AppProvider>
       </ToastProvider>
     </ErrorBoundary>

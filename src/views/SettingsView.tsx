@@ -9,6 +9,7 @@ import { RestoreBackupModal } from '../components/modals/RestoreBackupModal';
 import { useApp } from '../context/AppContext';
 import { SUPPORTED_CURRENCIES } from '../domain/types';
 import { BackupDataPayload } from '../domain/backupAndExport';
+import { LicenseSettingsSection } from '../device-protection';
 import {
   ShieldCheck,
   HardDrive,
@@ -205,6 +206,9 @@ export const SettingsView: React.FC = () => {
       />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {/* Device Protection Section */}
+        <LicenseSettingsSection />
+
         {/* Currency Preference Section */}
         <Card>
           <CardHeader>
