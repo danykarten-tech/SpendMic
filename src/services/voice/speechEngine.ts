@@ -41,9 +41,120 @@ class LocalSpeechEngine {
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
   private initPromise: Promise<void> | null = null;
+  private recognition: any = null;
+  private isUserListening: boolean = false;
+  private currentUtterance: SpeechSynthesisUtterance | null = null;
+  private audioFeedbackContext: AudioContext | null = null;
 
   constructor() {
+    this.initNativeRecognition();
     this.initAutomatic();
+  }
+
+  /**
+   * Initializes browser-native SpeechRecognition for zero-latency, high-accuracy multilingual recognition
+   */
+  private initNativeRecognition() {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognitionClass) {
+      try {
+        this.recognition = new SpeechRecognitionClass();
+        // Keep listening continuously so user can speak with natural pauses/delays without cutting off
+        this.recognition.continuous = true;
+        this.recognition.interimResults = true;
+        this.recognition.maxAlternatives = 1;
+        // Prioritize English & Indian English, understanding accents and Hinglish numbers
+        this.recognition.lang = typeof navigator !== 'undefined' && navigator.language?.toLowerCase().includes('hi')
+          ? 'hi-IN'
+          : 'en-IN';
+
+        this.recognition.onstart = () => {
+          if (!this.isUserListening) {
+            try {
+              this.recognition.abort();
+            } catch (e) {}
+            this.state.status = 'ready';
+            this.state.statusMessage = 'Voice ready — Tap mic to speak';
+            this.notify();
+            return;
+          }
+          this.state.status = 'listening';
+          this.state.statusMessage = 'Listening... Speak your expense, income, bills or savings command.';
+          this.notify();
+        };
+
+        this.recognition.onresult = (event: any) => {
+          if (!this.isUserListening) return;
+          let finalTranscript = '';
+          let interimTranscript = '';
+          for (let i = 0; i < event.results.length; ++i) {
+            const piece = event.results[i][0]?.transcript || '';
+            if (event.results[i].isFinal) {
+              finalTranscript += piece + ' ';
+            } else {
+              interimTranscript += piece;
+            }
+          }
+          const text = (finalTranscript + interimTranscript).trim();
+          if (text) {
+            this.state.transcript = text;
+            this.notify();
+          }
+        };
+
+        this.recognition.onerror = (event: any) => {
+          console.warn('Native speech recognition event:', event.error);
+          if (!this.isUserListening) {
+            this.state.status = 'ready';
+            this.state.statusMessage = 'Voice ready — Tap mic to speak';
+            this.notify();
+            return;
+          }
+          if (event.error === 'not-allowed') {
+            this.isUserListening = false;
+            this.state.status = 'error';
+            this.state.errorMessage = 'Microphone permission denied. Please allow microphone access.';
+            this.notify();
+          } else if (event.error === 'no-speech') {
+            // In continuous listening, ignore silence timeouts and keep listening if user hasn't stopped
+            if (!this.isUserListening) {
+              this.state.status = 'ready';
+              this.state.statusMessage = 'No speech detected — Tap mic and try again.';
+              this.notify();
+            }
+          } else {
+            if (!this.isUserListening) {
+              this.state.status = 'ready';
+              this.notify();
+            }
+          }
+        };
+
+        this.recognition.onend = () => {
+          // If the user has not pressed Stop or Close, keep listening across silence boundaries
+          if (this.isUserListening && this.recognition) {
+            try {
+              this.recognition.start();
+              return;
+            } catch (e) {
+              // Ignore if already starting
+            }
+          }
+          this.state.status = 'ready';
+          this.state.statusMessage = 'Voice ready — Tap mic to speak';
+          this.notify();
+        };
+
+        // If native speech engine is supported in browser, it is ready immediately!
+        this.state.status = 'ready';
+        this.state.downloadProgress = 100;
+        this.state.statusMessage = 'Offline voice ready';
+      } catch (e) {
+        console.warn('Native speech recognition initialization error:', e);
+        this.recognition = null;
+      }
+    }
   }
 
   public subscribe(callback: StateChangeCallback): () => void {
@@ -202,11 +313,26 @@ class LocalSpeechEngine {
    * Starts microphone recording (continuous until user stops)
    */
   public async startListening() {
+    this.isUserListening = true;
     this.state.transcript = '';
     this.state.errorMessage = undefined;
 
-    // Requirement: Do not allow a microphone command to be processed until the speech engine is ready
-    if (this.state.status !== 'ready') {
+    // 1. Try browser-native SpeechRecognition first (instant, real-time streaming, high accuracy)
+    if (this.recognition) {
+      try {
+        this.recognition.start();
+        return;
+      } catch (err: any) {
+        if (err.name === 'InvalidStateError') {
+          // Already running
+          return;
+        }
+        console.warn('Native speech recognition start failed, using MediaRecorder fallback:', err);
+      }
+    }
+
+    // 2. Fallback to local MediaRecorder + Whisper engine
+    if (this.state.status !== 'ready' && !this.worker) {
       this.state.errorMessage = 'Please wait for offline voice engine to finish preparing.';
       this.notify();
       return;
@@ -224,7 +350,6 @@ class LocalSpeechEngine {
       this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       this.audioChunks = [];
 
-      // Pre-warm AudioContext so decodeAudioData does not incur cold-start delay
       try {
         if (!this.audioContext) {
           const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -239,7 +364,16 @@ class LocalSpeechEngine {
         // Continue even if pre-warming context throws
       }
 
-      this.mediaRecorder = new MediaRecorder(this.mediaStream);
+      let mimeType = 'audio/webm';
+      if (typeof MediaRecorder !== 'undefined') {
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          mimeType = 'audio/webm;codecs=opus';
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4';
+        }
+      }
+
+      this.mediaRecorder = new MediaRecorder(this.mediaStream, { mimeType });
       this.mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           this.audioChunks.push(event.data);
@@ -249,37 +383,76 @@ class LocalSpeechEngine {
         this.processRecordedAudio();
       };
 
-      // 200ms slice for progressive audio buffering
-      this.mediaRecorder.start(200);
+      // Clean unfragmented audio recording
+      this.mediaRecorder.start();
       this.state.status = 'listening';
       this.state.statusMessage = 'Listening... Speak your expense, income, bills or savings command.';
       this.notify();
     } catch (err: any) {
+      this.isUserListening = false;
       this.state.status = 'error';
       this.state.errorMessage = 'Microphone permission denied or unavailable.';
       this.notify();
     }
   }
 
-
   /**
-   * Stops listening and triggers processing
+   * Stops listening and returns engine to ready state
    */
   public stopListening() {
-    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-      this.mediaRecorder.stop();
-      if (this.mediaStream) {
-        this.mediaStream.getTracks().forEach((track) => track.stop());
-      }
-      this.state.status = 'processing';
-      this.state.statusMessage = 'Processing recorded speech...';
-      this.notify();
+    this.isUserListening = false;
+    if (this.recognition) {
+      try {
+        this.recognition.abort();
+      } catch (e) {}
+      try {
+        this.recognition.stop();
+      } catch (e) {}
     }
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      try {
+        this.mediaRecorder.stop();
+      } catch (e) {}
+    }
+    if (this.mediaStream) {
+      try {
+        this.mediaStream.getTracks().forEach((track) => track.stop());
+      } catch (e) {}
+      this.mediaStream = null;
+    }
+    this.state.status = 'ready';
+    this.state.statusMessage = 'Voice ready — Tap mic to speak';
+    this.state.transcript = '';
+    this.notify();
+  }
+
+  public clearTranscript() {
+    this.state.transcript = '';
+    this.notify();
   }
 
   public cancelListening() {
-    this.stopListening();
-    this.state.status = this.worker ? 'ready' : 'unloaded';
+    this.isUserListening = false;
+    if (this.recognition) {
+      try {
+        this.recognition.abort();
+      } catch (e) {}
+      try {
+        this.recognition.stop();
+      } catch (e) {}
+    }
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      try {
+        this.mediaRecorder.stop();
+      } catch (e) {}
+    }
+    if (this.mediaStream) {
+      try {
+        this.mediaStream.getTracks().forEach((track) => track.stop());
+      } catch (e) {}
+      this.mediaStream = null;
+    }
+    this.state.status = 'ready';
     this.state.statusMessage = 'Listening cancelled.';
     this.state.transcript = '';
     this.notify();
@@ -307,57 +480,13 @@ class LocalSpeechEngine {
   }
 
   /**
-   * Trims leading and trailing silence to significantly minimize Whisper inference latency
-   */
-  private trimSilence(audioData: Float32Array): Float32Array {
-    const threshold = 0.008; // Energy threshold
-    const frameSize = 320; // 20ms frames at 16kHz
-    let start = 0;
-    let end = audioData.length;
-
-    // Detect first active audio frame
-    for (let i = 0; i < audioData.length - frameSize; i += frameSize) {
-      let sum = 0;
-      for (let j = 0; j < frameSize; j++) {
-        sum += Math.abs(audioData[i + j]);
-      }
-      if (sum / frameSize > threshold) {
-        start = Math.max(0, i - frameSize * 4); // Keep ~80ms buffer
-        break;
-      }
-    }
-
-    // Detect last active audio frame
-    for (let i = audioData.length - frameSize; i >= start; i -= frameSize) {
-      let sum = 0;
-      for (let j = 0; j < frameSize; j++) {
-        sum += Math.abs(audioData[i + j]);
-      }
-      if (sum / frameSize > threshold) {
-        end = Math.min(audioData.length, i + frameSize * 5); // Keep ~100ms buffer
-        break;
-      }
-    }
-
-    if (end <= start || end - start < frameSize * 5) {
-      const copy = new Float32Array(audioData.length);
-      copy.set(audioData);
-      return copy;
-    }
-
-    const trimmed = new Float32Array(end - start);
-    trimmed.set(audioData.subarray(start, end));
-    return trimmed;
-  }
-
-  /**
    * Converts recorded audio blob to 16kHz Float32 PCM array for Whisper Web Worker
    */
   private async processRecordedAudio() {
     if (this.audioChunks.length === 0) return;
 
     try {
-      const blob = new Blob(this.audioChunks, { type: 'audio/webm' });
+      const blob = new Blob(this.audioChunks, { type: this.mediaRecorder?.mimeType || 'audio/webm' });
       const arrayBuffer = await blob.arrayBuffer();
 
       if (!this.audioContext) {
@@ -375,9 +504,6 @@ class LocalSpeechEngine {
         float32Data = this.resampleTo16kHz(float32Data, decodedBuffer.sampleRate);
       }
 
-      // Trim silence from start and end to speed up Whisper inference
-      float32Data = this.trimSilence(float32Data);
-
       if (this.worker) {
         this.worker.postMessage({
           type: 'TRANSCRIBE',
@@ -393,17 +519,108 @@ class LocalSpeechEngine {
   }
 
   /**
-   * Offline Text-To-Speech Output using browser window.speechSynthesis
+   * Plays an immediate pleasant success chime sound via Web Audio API.
+   * Works consistently on all browsers without relying on external audio assets or OS TTS voices.
    */
-
-  public speak(text: string) {
-    if (this.state.isMuted || !('speechSynthesis' in window)) return;
+  public playSuccessChime() {
+    if (this.state.isMuted || typeof window === 'undefined') return;
     try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      window.speechSynthesis.speak(utterance);
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtxClass) return;
+      if (!this.audioFeedbackContext || this.audioFeedbackContext.state === 'closed') {
+        this.audioFeedbackContext = new AudioCtxClass();
+      }
+      if (this.audioFeedbackContext.state === 'suspended') {
+        this.audioFeedbackContext.resume();
+      }
+
+      const ctx = this.audioFeedbackContext;
+      const now = ctx.currentTime;
+      // High-pitched, warm 3-tone chime: C5 (523Hz) -> E5 (659Hz) -> G5 (784Hz)
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(523.25, now);
+      osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.1);
+      osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.2);
+
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.45);
+    } catch (e) {
+      // Audio chime error ignored
+    }
+  }
+
+  /**
+   * Speaks voice confirmation using browser window.speechSynthesis, backed by instant audio chime
+   */
+  public speak(text: string) {
+    if (this.state.isMuted || typeof window === 'undefined') return;
+
+    // 1. Play immediate positive audio chime sound
+    this.playSuccessChime();
+
+    // 2. Output spoken voice response via SpeechSynthesis
+    if (!('speechSynthesis' in window)) return;
+
+    try {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+      if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+        window.speechSynthesis.cancel();
+      }
+
+      // Small 60ms delay prevents Chrome bug where cancel() discards immediate speak() calls
+      setTimeout(() => {
+        try {
+          if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+
+          const utterance = new SpeechSynthesisUtterance(text);
+          this.currentUtterance = utterance; // Prevent garbage collection bug in Chrome/Safari
+
+          utterance.rate = 1.0;
+          utterance.pitch = 1.0;
+          utterance.lang = 'en-US';
+
+          // Pick an English or system default voice if available
+          const voices = window.speechSynthesis.getVoices();
+          if (voices && voices.length > 0) {
+            const preferredVoice =
+              voices.find((v) => v.lang.startsWith('en') || v.lang.startsWith('hi')) ||
+              voices.find((v) => v.default) ||
+              voices[0];
+            if (preferredVoice) {
+              utterance.voice = preferredVoice;
+            }
+          }
+
+          utterance.onend = () => {
+            if (this.currentUtterance === utterance) {
+              this.currentUtterance = null;
+            }
+          };
+
+          utterance.onerror = () => {
+            if (this.currentUtterance === utterance) {
+              this.currentUtterance = null;
+            }
+          };
+
+          window.speechSynthesis.speak(utterance);
+        } catch (e) {
+          // Ignore utterance error
+        }
+      }, 60);
     } catch (e) {
       // Ignore speech synthesis failures
     }

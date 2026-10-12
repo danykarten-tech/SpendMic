@@ -8,6 +8,7 @@ import {
 } from '../src/domain/voiceCommandParser';
 import { DEFAULT_CATEGORIES } from '../src/domain/categoriesData';
 import { SavingsGoal } from '../src/domain/types';
+import { getTodayLocalDateString } from '../src/domain/moneyAndDate';
 
 describe('Voice Command Parser Unit Tests', () => {
   describe('Number & Currency Extraction', () => {
@@ -35,11 +36,14 @@ describe('Voice Command Parser Unit Tests', () => {
     it('parses yesterday and today relative dates', () => {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      const expectedYesterday = yesterday.toISOString().split('T')[0];
+      const y = yesterday.getFullYear();
+      const m = String(yesterday.getMonth() + 1).padStart(2, '0');
+      const d = String(yesterday.getDate()).padStart(2, '0');
+      const expectedYesterday = `${y}-${m}-${d}`;
 
       expect(parseSpokenDate('I spent 350 on petrol yesterday')).toBe(expectedYesterday);
       expect(parseSpokenDate('kal petrol par 300 kharch hua')).toBe(expectedYesterday);
-      expect(parseSpokenDate('today shopping 500')).toBe(new Date().toISOString().split('T')[0]);
+      expect(parseSpokenDate('today shopping 500')).toBe(getTodayLocalDateString());
     });
   });
 

@@ -1,6 +1,6 @@
-# Pocket Expense Tracker (Phase 5 - Release Ready)
+# SpendMic AI — Offline Personal Expense Tracker
 
-A calm, premium, offline-first personal accounting web application designed for mobile and desktop browsers. Built with **React 18**, **TypeScript**, **Vite**, **IndexedDB**, and **Service Worker PWA** technology.
+A calm, premium, offline-first personal accounting web application designed for mobile and desktop browsers with on-device AI voice assistant. Built with **React 18**, **TypeScript**, **Vite**, **IndexedDB**, and **Service Worker PWA** technology.
 
 ---
 

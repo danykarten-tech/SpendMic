@@ -116,7 +116,7 @@ self.onmessage = async (event: MessageEvent) => {
         task: 'transcribe',
         language: 'en',
         return_timestamps: false,
-        max_new_tokens: 64,
+        max_new_tokens: 128,
         temperature: 0.0,
         num_beams: 1,
         do_sample: false,
