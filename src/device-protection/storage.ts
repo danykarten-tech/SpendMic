@@ -44,9 +44,10 @@ export class DeviceProtectionStorage {
     const current = this.load();
 
     // CRITICAL SECURITY ENFORCEMENT:
-    // If the device is currently BLOCKED, an offline/network error MUST NEVER downgrade or revert it to TEMPORARY_SERVER_UNAVAILABLE or PENDING_VERIFICATION
+    // If the device is currently BLOCKED on the same license, an offline/network error MUST NEVER downgrade or revert it to TEMPORARY_SERVER_UNAVAILABLE or PENDING_VERIFICATION
     let nextState: DeviceProtectionState = updates.state || current.state;
-    if (current.state === 'BLOCKED' && (nextState === 'TEMPORARY_SERVER_UNAVAILABLE' || nextState === 'PENDING_VERIFICATION')) {
+    const isNewLicense = !!updates.licenseKey && updates.licenseKey !== current.licenseKey;
+    if (!isNewLicense && current.state === 'BLOCKED' && (nextState === 'TEMPORARY_SERVER_UNAVAILABLE' || nextState === 'PENDING_VERIFICATION')) {
       nextState = 'BLOCKED';
     }
 

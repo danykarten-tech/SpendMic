@@ -70,6 +70,7 @@ export class DeviceProtectionApiClient {
       const response = await this.fetchWithBackoff('/api/license/activate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({
           licenseKey: licenseKey.trim().toUpperCase(),
           deviceId,
@@ -78,7 +79,25 @@ export class DeviceProtectionApiClient {
         }),
       });
 
-      const data = await response.json().catch(() => ({}));
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        return {
+          success: false,
+          authorized: false,
+          isNetworkError: true,
+          message: 'Licensing server temporarily unavailable',
+        };
+      }
+
+      const data = await response.json().catch(() => null);
+      if (!data) {
+        return {
+          success: false,
+          authorized: false,
+          isNetworkError: true,
+          message: 'Failed to parse licensing response',
+        };
+      }
 
       if (response.status === 200 && data.authorized) {
         return {
@@ -89,12 +108,22 @@ export class DeviceProtectionApiClient {
         };
       }
 
-      // Explicit server rejection (e.g. 403 slot limit reached)
+      // Explicit server rejection ONLY when server explicitly returns 403 or state === 'BLOCKED'
+      if ((response.status === 403 || response.status === 400) && data.state === 'BLOCKED') {
+        return {
+          success: true,
+          authorized: false,
+          message: data.message || 'Device limit reached for this license.',
+          devices: data.devices || [],
+        };
+      }
+
+      // Any other HTTP code (401, 404, 500, etc.) is a server/network error
       return {
-        success: true,
+        success: false,
         authorized: false,
-        message: data.message || 'Device limit reached for this license.',
-        devices: data.devices || [],
+        isNetworkError: true,
+        message: data.message || `Licensing server returned status ${response.status}`,
       };
     } catch {
       // Server down, network offline, timeout
@@ -119,6 +148,7 @@ export class DeviceProtectionApiClient {
       const response = await this.fetchWithBackoff('/api/license/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({
           licenseKey: licenseKey.trim().toUpperCase(),
           deviceId,
@@ -126,7 +156,25 @@ export class DeviceProtectionApiClient {
         }),
       });
 
-      const data = await response.json().catch(() => ({}));
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        return {
+          success: false,
+          authorized: false,
+          isNetworkError: true,
+          message: 'Licensing server temporarily unavailable',
+        };
+      }
+
+      const data = await response.json().catch(() => null);
+      if (!data) {
+        return {
+          success: false,
+          authorized: false,
+          isNetworkError: true,
+          message: 'Failed to parse licensing response',
+        };
+      }
 
       if (response.status === 200 && data.authorized) {
         return {
@@ -136,10 +184,19 @@ export class DeviceProtectionApiClient {
         };
       }
 
+      if ((response.status === 403 || response.status === 400) && data.state === 'BLOCKED') {
+        return {
+          success: true,
+          authorized: false,
+          message: data.message || 'Device revoked or limit reached',
+        };
+      }
+
       return {
-        success: true,
+        success: false,
         authorized: false,
-        message: data.message || 'Device not authorized',
+        isNetworkError: true,
+        message: data.message || 'Verification endpoint unavailable',
       };
     } catch {
       return {
@@ -164,6 +221,7 @@ export class DeviceProtectionApiClient {
       const response = await this.fetchWithBackoff('/api/license/replace', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({
           licenseKey: licenseKey.trim().toUpperCase(),
           targetDeviceId,
@@ -172,7 +230,23 @@ export class DeviceProtectionApiClient {
         }),
       });
 
-      const data = await response.json().catch(() => ({}));
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        return {
+          success: false,
+          isNetworkError: true,
+          message: 'Licensing server temporarily unavailable',
+        };
+      }
+
+      const data = await response.json().catch(() => null);
+      if (!data) {
+        return {
+          success: false,
+          isNetworkError: true,
+          message: 'Invalid response from server',
+        };
+      }
 
       if (response.status === 200 && data.success) {
         return {

@@ -69,6 +69,8 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
       const key = rawKey.trim().toUpperCase();
       const current = DeviceProtectionStorage.load();
 
+      const isNewKey = key !== current.licenseKey;
+
       const res = await DeviceProtectionApiClient.activate(
         key,
         current.deviceId,
@@ -76,7 +78,7 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
       );
 
       if (res.success && res.authorized) {
-        const nextState = transitionState(current.state, {
+        const nextState = transitionState(isNewKey ? 'UNKNOWN' : current.state, {
           type: 'SERVER_AUTHORIZED',
           token: res.token || '',
           activeDevices: res.devices,
@@ -93,17 +95,19 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
       }
 
       if (res.isNetworkError) {
-        // First time offline: transition to pending
-        const nextState = transitionState(current.state, { type: 'NETWORK_OFFLINE' });
+        // If it's a new key or not blocked, transition to pending verification grace
+        const baseState = isNewKey ? 'UNKNOWN' : current.state;
+        const nextState = transitionState(baseState, { type: 'NETWORK_OFFLINE' });
         updateCache({
           state: nextState,
           licenseKey: key,
+          blockedReason: undefined,
         });
         return true; // Allows pending offline grace
       }
 
       // Explicit server rejection (e.g. 2-device limit exceeded)
-      const nextState = transitionState(current.state, {
+      const nextState = transitionState(isNewKey ? 'UNKNOWN' : current.state, {
         type: 'SERVER_REJECTED',
         reason: res.message,
         activeDevices: res.devices,

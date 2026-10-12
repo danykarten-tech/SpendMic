@@ -7,8 +7,9 @@ const MAX_ACTIVE_DEVICES = 2;
 // In-memory registry fallback for test and serverless ephemeral environments
 const memoryStore = new Map<string, LicenseRecord>();
 
-// File storage path for persistent local development testing
-const DATA_DIR = path.resolve(process.cwd(), '.data');
+// File storage path: use /tmp in Vercel serverless (writable), .data in local development
+const isVercel = !!process.env.VERCEL;
+const DATA_DIR = isVercel ? '/tmp' : path.resolve(process.cwd(), '.data');
 const DATA_FILE = path.join(DATA_DIR, 'license-db.json');
 
 function ensureDataDir(): void {

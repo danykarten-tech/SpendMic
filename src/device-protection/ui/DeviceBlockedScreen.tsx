@@ -13,6 +13,7 @@ import {
   FileSpreadsheet,
   Key,
   CheckCircle,
+  RotateCcw,
 } from 'lucide-react';
 
 export const DeviceBlockedScreen: React.FC = () => {
@@ -22,6 +23,7 @@ export const DeviceBlockedScreen: React.FC = () => {
     deviceName,
     blockedReason,
     activateLicense,
+    resetLicense,
   } = useDeviceProtection();
 
   const { exportJSONBackup, exportCSV } = useApp();
@@ -249,6 +251,22 @@ export const DeviceBlockedScreen: React.FC = () => {
                   </Button>
                 </div>
               )}
+
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  resetLicense();
+                  showToast({
+                    type: 'info',
+                    title: 'Device Reset',
+                    description: 'Device registration cleared. Enter your license key to activate.',
+                  });
+                }}
+                leftIcon={<RotateCcw size={15} />}
+                style={{ width: '100%', justifyContent: 'center', fontSize: '0.8125rem', color: 'var(--text-muted)' }}
+              >
+                Reset Device / Enter Different Key
+              </Button>
             </div>
 
             {/* DATA SAFETY & EXPORT GUARANTEE SECTION */}
