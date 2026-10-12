@@ -307,6 +307,16 @@ describe('App Integration Tests', () => {
   beforeEach(() => {
     mockRepo = new TestInMemoryRepository();
     NotificationStorage.clearAll();
+    localStorage.setItem(
+      'spendmic_device_auth_cache',
+      JSON.stringify({
+        state: 'AUTHORIZED',
+        licenseKey: 'SPM-TEST-1234-ABCD',
+        deviceId: '11111111-1111-4111-8111-111111111111',
+        deviceName: 'Test Runner Device',
+        lastVerifiedAt: new Date().toISOString(),
+      })
+    );
   });
 
   afterEach(() => {

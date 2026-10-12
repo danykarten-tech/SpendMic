@@ -45,3 +45,4 @@ coverage/
 # Local cache & backups
 *.local
 .system_generated/
+.data/

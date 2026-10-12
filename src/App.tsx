@@ -15,8 +15,19 @@ import { SettingsView } from './views/SettingsView';
 
 import { ITransactionRepository } from './storage/storageRepository';
 
+import { DeviceProtectionProvider, useDeviceProtection, DeviceBlockedScreen, DeviceActivationScreen } from './device-protection';
+
 const MainContent: React.FC = () => {
   const { activeTab } = useApp();
+  const { isBlocked, isUnactivated } = useDeviceProtection();
+
+  if (isUnactivated) {
+    return <DeviceActivationScreen />;
+  }
+
+  if (isBlocked) {
+    return <DeviceBlockedScreen />;
+  }
 
   switch (activeTab) {
     case 'home':
@@ -45,9 +56,11 @@ export function App({ repository }: { repository?: ITransactionRepository } = {}
     <ErrorBoundary>
       <ToastProvider>
         <AppProvider repository={repository}>
-          <AppShell>
-            <MainContent />
-          </AppShell>
+          <DeviceProtectionProvider>
+            <AppShell>
+              <MainContent />
+            </AppShell>
+          </DeviceProtectionProvider>
         </AppProvider>
       </ToastProvider>
     </ErrorBoundary>

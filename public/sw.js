@@ -1,4 +1,4 @@
-const SHELL_CACHE_NAME = 'pocket-tracker-shell-v2';
+const SHELL_CACHE_NAME = 'pocket-tracker-shell-v3';
 const VOICE_CACHE_NAME = 'pocket-tracker-voice-v1';
 
 const APP_SHELL_ASSETS = [
@@ -66,6 +66,9 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
+
+  // Never cache or intercept licensing API calls
+  if (url.pathname.startsWith('/api/')) return;
 
   // Cache-first for offline voice models and WebAssembly binaries
   if (url.pathname.startsWith('/models/') || url.pathname.startsWith('/lib/')) {
