@@ -84,7 +84,7 @@ export const LicenseSettingsSection: React.FC = () => {
 
   const getStatusBadge = () => {
     if (isAuthorized) {
-      return <Badge variant="income">Authorized (2-Device Limit Active)</Badge>;
+      return <Badge variant="income">Authorized Device</Badge>;
     }
     if (isPending) {
       return <Badge variant="info">Pending Server Verification</Badge>;
@@ -110,7 +110,7 @@ export const LicenseSettingsSection: React.FC = () => {
             {getStatusBadge()}
           </div>
           <CardDescription>
-            SpendMic allows up to two active, authorized devices per license. Financial records remain 100% on this device.
+            License is active on this device. Financial records remain 100% private on your device.
           </CardDescription>
         </CardHeader>
 
@@ -202,7 +202,7 @@ export const LicenseSettingsSection: React.FC = () => {
                 disabled={activeDevices.length === 0}
                 leftIcon={<Smartphone size={16} />}
               >
-                Manage Active Devices ({activeDevices.length}/2)
+                Manage Registered Devices
               </Button>
 
               {!isEditingKey && (

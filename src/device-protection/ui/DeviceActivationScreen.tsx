@@ -8,7 +8,6 @@ import {
   Key,
   Smartphone,
   ExternalLink,
-  Sparkles,
   Lock,
 } from 'lucide-react';
 
@@ -213,7 +212,7 @@ export const DeviceActivationScreen: React.FC<DeviceActivationScreenProps> = ({
               </Button>
             </form>
 
-            {/* Privacy & Two-Device Limit Notice */}
+            {/* Privacy & Offline Notice */}
             <div
               style={{
                 marginTop: '24px',
@@ -225,11 +224,6 @@ export const DeviceActivationScreen: React.FC<DeviceActivationScreenProps> = ({
                 textAlign: 'center',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                <Sparkles size={16} color="var(--primary-brand)" />
-                <span>Each license allows up to <strong>2 active devices</strong>.</span>
-              </div>
-
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
                 100% offline-first. Your transactions, budgets, and personal data remain stored solely on your device.
               </div>
