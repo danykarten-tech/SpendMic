@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Dialog } from '../../components/ui/Dialog';
 import { Button } from '../../components/ui/Button';
-import { useDeviceProtection } from '../DeviceProtectionContext';
+import { useDeviceProtection } from '../context';
 import { useToast } from '../../components/ui/Toast';
 import { Smartphone, RefreshCw, AlertTriangle } from 'lucide-react';
 

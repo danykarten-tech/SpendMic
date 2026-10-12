@@ -1,29 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { DeviceProtectionState, RegisteredDevice, DeviceAuthCache } from './types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { DeviceAuthCache } from './types';
 import { DeviceProtectionStorage } from './storage';
 import { transitionState } from './stateMachine';
 import { DeviceProtectionApiClient } from './apiClient';
+import { DeviceProtectionContext, useDeviceProtection } from './context';
 
-interface DeviceProtectionContextType {
-  state: DeviceProtectionState;
-  licenseKey: string | null;
-  deviceId: string;
-  deviceName: string;
-  isAuthorized: boolean;
-  isBlocked: boolean;
-  isPending: boolean;
-  isTemporaryServerUnavailable: boolean;
-  isUnactivated: boolean;
-  lastVerifiedAt: string | null;
-  blockedReason?: string;
-  activeDevices: RegisteredDevice[];
-  activateLicense: (key: string) => Promise<boolean>;
-  verifyDevice: () => Promise<boolean>;
-  replaceDevice: (targetDeviceId: string) => Promise<boolean>;
-  resetLicense: () => void;
-}
-
-const DeviceProtectionContext = createContext<DeviceProtectionContextType | undefined>(undefined);
+export { useDeviceProtection };
 
 export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [cache, setCache] = useState<DeviceAuthCache>(() => DeviceProtectionStorage.load());
@@ -250,11 +232,3 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
     </DeviceProtectionContext.Provider>
   );
 };
-
-export function useDeviceProtection(): DeviceProtectionContextType {
-  const context = useContext(DeviceProtectionContext);
-  if (!context) {
-    throw new Error('useDeviceProtection must be used within a DeviceProtectionProvider');
-  }
-  return context;
-}

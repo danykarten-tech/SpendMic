@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useDeviceProtection } from '../DeviceProtectionContext';
+import { useDeviceProtection } from '../context';
 import { useApp } from '../../context/AppContext';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent } from '../../components/ui/Card';

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
-import { useDeviceProtection } from '../DeviceProtectionContext';
+import { useDeviceProtection } from '../context';
 import { useToast } from '../../components/ui/Toast';
 import { DeviceReplacementModal } from './DeviceReplacementModal';
 import {
@@ -10,6 +10,7 @@ import {
   Smartphone,
   RefreshCw,
   Key,
+  RotateCcw,
 } from 'lucide-react';
 
 export const LicenseSettingsSection: React.FC = () => {
@@ -25,6 +26,7 @@ export const LicenseSettingsSection: React.FC = () => {
     activeDevices,
     activateLicense,
     verifyDevice,
+    resetLicense,
   } = useDeviceProtection();
 
   const { showToast } = useToast();
@@ -210,6 +212,24 @@ export const LicenseSettingsSection: React.FC = () => {
                   leftIcon={<Key size={16} />}
                 >
                   {licenseKey ? 'Change License Key' : 'Enter License Key'}
+                </Button>
+              )}
+
+              {licenseKey && (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    resetLicense();
+                    showToast({
+                      type: 'info',
+                      title: 'License Reset',
+                      description: 'Device de-registered. Showing activation screen.',
+                    });
+                  }}
+                  leftIcon={<RotateCcw size={16} />}
+                  style={{ color: 'var(--danger-crimson)' }}
+                >
+                  Deactivate / Reset Device
                 </Button>
               )}
             </div>
