@@ -1,4 +1,4 @@
-const SHELL_CACHE_NAME = 'spendmic-shell-v6';
+const SHELL_CACHE_NAME = 'spendmic-shell-v7';
 const VOICE_CACHE_NAME = 'pocket-tracker-voice-v1';
 
 const APP_SHELL_ASSETS = [

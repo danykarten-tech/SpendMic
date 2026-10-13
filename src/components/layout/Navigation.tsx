@@ -46,11 +46,11 @@ export const DesktopSidebar: React.FC = () => {
         <img
           src="/logo-icon.png"
           alt="SpendMic"
-          width={40}
-          height={40}
+          width={32}
+          height={32}
           style={{
-            width: '40px',
-            height: '40px',
+            width: '32px',
+            height: '32px',
             objectFit: 'contain',
             flexShrink: 0,
           }}
