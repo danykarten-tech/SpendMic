@@ -251,6 +251,18 @@ button:disabled {
 
 .download-secondary:hover { text-decoration: none; background: var(--primary-subtle); }
 .download-install-message { margin-top: 14px; color: var(--positive-emerald); font-size: 0.875rem; }
+.download-installed-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 20px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--positive-emerald);
+  color: var(--positive-emerald);
+  font-size: 0.94rem;
+  font-weight: 600;
+  background: rgba(16, 185, 129, 0.06);
+}
 
 .download-grid {
   display: grid;
