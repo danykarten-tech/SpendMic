@@ -31,6 +31,10 @@ export const DownloadPage: React.FC = () => {
   const { canNativeInstall, isInstalled, isInstalling, platform, promptInstall } = usePWAInstall();
   const [installMessage, setInstallMessage] = useState<string | null>(null);
 
+  const launchApp = () => {
+    window.location.assign('/');
+  };
+
   const showInstallHelp = () => {
     document.getElementById('install-steps')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     setInstallMessage('If Chrome shows “Open in app” in its address bar, SpendMic is already installed. Click that browser control to open the installed app.');
@@ -62,10 +66,9 @@ export const DownloadPage: React.FC = () => {
 
         <div className="download-actions">
           {isInstalled ? (
-            <div className="download-installed-notice">
-              <CheckCircle2 size={19} />
-              SpendMic is installed — open it from your home screen or app launcher.
-            </div>
+            <button className="download-primary" onClick={launchApp}>
+              <CheckCircle2 size={19} /> Launch SpendMic
+            </button>
           ) : canNativeInstall ? (
             <button className="download-primary" onClick={handleInstall} disabled={isInstalling}>
               <Download size={19} /> {isInstalling ? 'Opening install prompt…' : 'Install SpendMic'}
