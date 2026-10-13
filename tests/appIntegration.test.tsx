@@ -332,6 +332,17 @@ describe('App Integration Tests', () => {
     });
   });
 
+  it('opens the dashboard without a customer license in local development', async () => {
+    localStorage.clear();
+
+    render(<App repository={mockRepo} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Financial Overview/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Activate SpendMic AI/i)).not.toBeInTheDocument();
+  });
+
   it('opens Add Transaction modal, submits record, and updates dashboard metrics immediately', async () => {
     render(<App repository={mockRepo} />);
 

@@ -8,13 +8,14 @@ import { verifyOfflineAuthorizationToken } from './licenseToken';
 
 export { useDeviceProtection };
 
-// ─── Local-testing bypass ────────────────────────────────────────────────────
-// VITE_BYPASS_LICENSE_CHECK is only ever set in the local .env file.
-// It is NEVER present in Vercel / production builds.
-const BYPASS_LICENSE = import.meta.env.VITE_BYPASS_LICENSE_CHECK === 'true';
+// Local development is determined by Vite at build time. `npm run dev` is the
+// only path that reaches this branch; Vite preview builds and Vercel builds set
+// DEV to false. No environment value, URL, storage value, or user setting can
+// turn this into a customer-build bypass.
+const IS_LOCAL_DEVELOPMENT = import.meta.env.DEV;
 
 export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  if (BYPASS_LICENSE) {
+  if (IS_LOCAL_DEVELOPMENT) {
     return (
       <DeviceProtectionContext.Provider
         value={{
@@ -213,23 +214,6 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
     };
 
     window.addEventListener('online', handleOnline);
-
-    // Auto-activate via URL query parameter (e.g. ?license=SPM-... or ?key=SPM-...)
-    if (typeof window !== 'undefined') {
-      try {
-        const searchParams = new URLSearchParams(window.location.search);
-        const urlKey = searchParams.get('license') || searchParams.get('key');
-        if (urlKey && urlKey.trim().length > 0) {
-          const cleanKey = urlKey.trim().toUpperCase();
-          // Remove query param from browser address bar without reloading
-          const newUrl = window.location.pathname + window.location.hash;
-          window.history.replaceState({}, document.title, newUrl);
-          activateLicense(cleanKey);
-        }
-      } catch {
-        // Fallback
-      }
-    }
 
     // Initial check
     if (cache.licenseKey) {
