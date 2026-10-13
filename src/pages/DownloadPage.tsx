@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, Download, ExternalLink, Laptop, LockKeyhole, ShieldCheck, Smartphone, WifiOff } from 'lucide-react';
+import { CheckCircle2, Download, Laptop, LockKeyhole, ShieldCheck, Smartphone, WifiOff } from 'lucide-react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
 type Platform = 'android' | 'ios' | 'desktop' | 'other';
@@ -17,8 +17,8 @@ const INSTALL_STEPS: Record<Platform, string[]> = {
   ],
   desktop: [
     'Open this page in Google Chrome or Microsoft Edge.',
-    'Click Install SpendMic below, or use the install icon in the address bar.',
-    'Confirm installation. SpendMic will open in its own app window.',
+    'If the browser shows “Open in app” in the address bar, SpendMic is already installed—click that browser control to launch the installed app.',
+    'Otherwise, click the browser install icon in the address bar or choose Install app from the browser menu, then confirm.',
   ],
   other: [
     'Open this page in a current version of Chrome, Edge, or Safari.',
@@ -31,8 +31,13 @@ export const DownloadPage: React.FC = () => {
   const { canNativeInstall, isInstalled, isInstalling, platform, promptInstall } = usePWAInstall();
   const [installMessage, setInstallMessage] = useState<string | null>(null);
 
-  const openApp = () => {
+  const openInstalledApp = () => {
     window.location.assign('/');
+  };
+
+  const showInstallHelp = () => {
+    document.getElementById('install-steps')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setInstallMessage('If Chrome shows “Open in app” in its address bar, SpendMic is already installed. Click that browser control to open the installed app.');
   };
 
   const handleInstall = async () => {
@@ -61,16 +66,16 @@ export const DownloadPage: React.FC = () => {
 
         <div className="download-actions">
           {isInstalled ? (
-            <button className="download-primary" onClick={openApp}>
-              <CheckCircle2 size={19} /> Open SpendMic
+            <button className="download-primary" onClick={openInstalledApp}>
+              <CheckCircle2 size={19} /> Open SpendMic dashboard
             </button>
           ) : canNativeInstall ? (
             <button className="download-primary" onClick={handleInstall} disabled={isInstalling}>
               <Download size={19} /> {isInstalling ? 'Opening install prompt…' : 'Install SpendMic'}
             </button>
           ) : (
-            <button className="download-primary" onClick={openApp}>
-              <ExternalLink size={19} /> Open SpendMic
+            <button className="download-primary" onClick={showInstallHelp}>
+              <Download size={19} /> How to install SpendMic
             </button>
           )}
           <a className="download-secondary" href="#install-steps">View install steps</a>
@@ -92,10 +97,9 @@ export const DownloadPage: React.FC = () => {
         {platform === 'ios' && <p className="download-note">On iPhone and iPad, Safari’s Add to Home Screen is the supported installation method.</p>}
       </section>
 
-      <section className="download-ready" aria-label="Ready to activate">
-        <h2>Already have a license key?</h2>
-        <p>Open SpendMic and enter the key from your purchase email. Your financial data is never uploaded as part of activation.</p>
-        <button className="download-primary" onClick={openApp}>Open SpendMic <ExternalLink size={17} /></button>
+      <section className="download-ready" aria-label="Installed app help">
+        <h2>Already installed?</h2>
+        <p>Use the “Open in app” control in your browser’s address bar, or launch SpendMic from your computer’s app list. Activation is requested only inside the installed app.</p>
       </section>
     </main>
   );
