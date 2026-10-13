@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { isRunningInstalledPWA } from '../device-protection/installMode';
 
 /** Represents the browser's beforeinstallprompt event (not yet in TypeScript DOM lib) */
 interface BeforeInstallPromptEvent extends Event {
@@ -24,14 +25,7 @@ export function usePWAInstall() {
   const platform = detectPlatform();
 
   useEffect(() => {
-    // Check if already installed (standalone mode)
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      setIsInstalled(true);
-      return;
-    }
-
-    // iOS/Safari: check navigator.standalone
-    if ((navigator as unknown as { standalone?: boolean }).standalone === true) {
+    if (isRunningInstalledPWA()) {
       setIsInstalled(true);
       return;
     }

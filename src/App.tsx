@@ -16,16 +16,18 @@ import { SettingsView } from './views/SettingsView';
 import { ITransactionRepository } from './storage/storageRepository';
 
 import { DeviceProtectionProvider, useDeviceProtection, DeviceBlockedScreen, DeviceActivationScreen } from './device-protection';
+import { isRunningInstalledPWA } from './device-protection/installMode';
 
 const MainContent: React.FC = () => {
   const { activeTab } = useApp();
   const { isBlocked, isUnactivated } = useDeviceProtection();
+  const requiresActivation = isRunningInstalledPWA();
 
-  if (isUnactivated) {
+  if (requiresActivation && isUnactivated) {
     return <DeviceActivationScreen />;
   }
 
-  if (isBlocked) {
+  if (requiresActivation && isBlocked) {
     return <DeviceBlockedScreen />;
   }
 
