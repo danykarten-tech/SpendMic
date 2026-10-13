@@ -1,4 +1,7 @@
-const SHELL_CACHE_NAME = 'spendmic-shell-v7';
+// Bump this whenever a release changes app-shell behavior. It makes every
+// existing installed app and browser tab replace its cached index/bundle on
+// the next visit instead of continuing to execute an older release.
+const SHELL_CACHE_NAME = 'spendmic-shell-v8';
 const VOICE_CACHE_NAME = 'pocket-tracker-voice-v1';
 
 const APP_SHELL_ASSETS = [
