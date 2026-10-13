@@ -3,7 +3,20 @@ import crypto from 'crypto';
 const DEFAULT_DEV_SECRET = 'spendmic-dev-signing-secret-do-not-use-in-production-3849';
 
 export function getSigningSecret(): string {
-  return process.env.LICENSE_SECRET_KEY || DEFAULT_DEV_SECRET;
+  if (process.env.LICENSE_SECRET_KEY) return process.env.LICENSE_SECRET_KEY;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('LICENSE_SECRET_KEY must be configured in production.');
+  }
+  return DEFAULT_DEV_SECRET;
+}
+
+function getPrivateSigningKey(): string | null {
+  const key = process.env.LICENSE_PRIVATE_KEY;
+  if (key) return key.replace(/\\n/g, '\n');
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('LICENSE_PRIVATE_KEY must be configured in production.');
+  }
+  return null;
 }
 
 export function isValidUUID(id: string): boolean {
@@ -37,8 +50,12 @@ export function createAuthorizationToken(licenseKey: string, deviceId: string, d
   };
 
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const secret = getSigningSecret();
-  const signature = crypto.createHmac('sha256', secret).update(payloadB64).digest('base64url');
+  const privateKey = getPrivateSigningKey();
+  // HMAC remains available only for local development and existing unit tests.
+  // Production tokens are Ed25519 signed and verified in the PWA with its public key.
+  const signature = privateKey
+    ? crypto.sign(null, Buffer.from(payloadB64), privateKey).toString('base64url')
+    : crypto.createHmac('sha256', getSigningSecret()).update(payloadB64).digest('base64url');
 
   return `${payloadB64}.${signature}`;
 }
@@ -54,15 +71,16 @@ export function verifyAuthorizationToken(token: string, expectedLicenseKey?: str
   }
 
   const [payloadB64, signature] = parts;
-  const secret = getSigningSecret();
-  const expectedSignature = crypto.createHmac('sha256', secret).update(payloadB64).digest('base64url');
-
-  const sigBuffer = Buffer.from(signature);
-  const expectedSigBuffer = Buffer.from(expectedSignature);
-
-  if (sigBuffer.length !== expectedSigBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedSigBuffer)) {
-    return { valid: false, reason: 'Invalid signature' };
-  }
+  const privateKey = getPrivateSigningKey();
+  const validSignature = privateKey
+    ? crypto.verify(null, Buffer.from(payloadB64), crypto.createPublicKey(privateKey), Buffer.from(signature, 'base64url'))
+    : (() => {
+      const expected = crypto.createHmac('sha256', getSigningSecret()).update(payloadB64).digest('base64url');
+      const actualBuffer = Buffer.from(signature);
+      const expectedBuffer = Buffer.from(expected);
+      return actualBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+    })();
+  if (!validSignature) return { valid: false, reason: 'Invalid signature' };
 
   try {
     const payload: TokenPayload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));

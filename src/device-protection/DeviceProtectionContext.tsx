@@ -4,11 +4,44 @@ import { DeviceProtectionStorage } from './storage';
 import { transitionState } from './stateMachine';
 import { DeviceProtectionApiClient } from './apiClient';
 import { DeviceProtectionContext, useDeviceProtection } from './context';
+import { verifyOfflineAuthorizationToken } from './licenseToken';
 
 export { useDeviceProtection };
 
+// ─── Local-testing bypass ────────────────────────────────────────────────────
+// VITE_BYPASS_LICENSE_CHECK is only ever set in the local .env file.
+// It is NEVER present in Vercel / production builds.
+const BYPASS_LICENSE = import.meta.env.VITE_BYPASS_LICENSE_CHECK === 'true';
+
 export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  if (BYPASS_LICENSE) {
+    return (
+      <DeviceProtectionContext.Provider
+        value={{
+          state: 'AUTHORIZED',
+          licenseKey: 'DEV-BYPASS',
+          deviceId: 'local-dev',
+          deviceName: 'Local Dev Device',
+          isAuthorized: true,
+          isBlocked: false,
+          isPending: false,
+          isTemporaryServerUnavailable: false,
+          isUnactivated: false,
+          lastVerifiedAt: new Date().toISOString(),
+          blockedReason: undefined,
+          activeDevices: [],
+          activateLicense: async () => true,
+          verifyDevice: async () => true,
+          replaceDevice: async () => true,
+          resetLicense: () => {},
+        }}
+      >
+        {children}
+      </DeviceProtectionContext.Provider>
+    );
+  }
   const [cache, setCache] = useState<DeviceAuthCache>(() => DeviceProtectionStorage.load());
+  const [hasValidOfflineToken, setHasValidOfflineToken] = useState<boolean>(() => !import.meta.env.PROD);
 
   // Helper to update both in-memory state and persistent storage
   const updateCache = useCallback((updates: Partial<DeviceAuthCache>) => {
@@ -95,15 +128,9 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
       }
 
       if (res.isNetworkError) {
-        // If it's a new key or not blocked, transition to pending verification grace
-        const baseState = isNewKey ? 'UNKNOWN' : current.state;
-        const nextState = transitionState(baseState, { type: 'NETWORK_OFFLINE' });
-        updateCache({
-          state: nextState,
-          licenseKey: key,
-          blockedReason: undefined,
-        });
-        return true; // Allows pending offline grace
+        // A new key is never trusted while offline. Previously authorized
+        // devices retain offline access through verifyDevice(), not activation.
+        return false;
       }
 
       // Explicit server rejection (e.g. 2-device limit exceeded)
@@ -159,6 +186,19 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
     setCache(DeviceProtectionStorage.getInitialCache());
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!import.meta.env.PROD) {
+      setHasValidOfflineToken(true);
+      return undefined;
+    }
+    setHasValidOfflineToken(false);
+    void verifyOfflineAuthorizationToken(cache.token).then((valid) => {
+      if (!cancelled) setHasValidOfflineToken(valid);
+    });
+    return () => { cancelled = true; };
+  }, [cache.token]);
+
   // Background verification on load and on reconnecting online
   useEffect(() => {
     const handleOnline = () => {
@@ -205,11 +245,11 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
     };
   }, [activateLicense, verifyDevice, cache.licenseKey, cache.state]);
 
-  const isAuthorized = cache.state === 'AUTHORIZED';
+  const isAuthorized = cache.state === 'AUTHORIZED' && hasValidOfflineToken;
   const isBlocked = cache.state === 'BLOCKED' || cache.state === 'REPLACEMENT_REQUIRED';
   const isPending = cache.state === 'PENDING_VERIFICATION';
   const isTemporaryServerUnavailable = cache.state === 'TEMPORARY_SERVER_UNAVAILABLE';
-  const isUnactivated = !cache.licenseKey || cache.state === 'UNKNOWN';
+  const isUnactivated = !cache.licenseKey || cache.state === 'UNKNOWN' || !hasValidOfflineToken;
 
   return (
     <DeviceProtectionContext.Provider
