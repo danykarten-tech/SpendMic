@@ -21,11 +21,10 @@ import { isRunningInstalledPWA } from './device-protection/installMode';
 const MainContent: React.FC = () => {
   const { activeTab } = useApp();
   const { isBlocked, isUnactivated } = useDeviceProtection();
-  // In production every visitor must activate — whether they open the app in a
-  // browser tab or as an installed PWA. In dev (npm run dev), PROD is false and
-  // DeviceProtectionContext already sets isUnactivated=false, so this has no
-  // effect on the developer workflow.
-  const requiresActivation = import.meta.env.PROD || isRunningInstalledPWA();
+  // Activation gate applies only to the installed PWA (display-mode: standalone).
+  // A browser tab opens the dashboard directly — this is the intended developer/preview flow.
+  // Customers reach the activation gate by installing the app from the /download page.
+  const requiresActivation = isRunningInstalledPWA();
 
   if (requiresActivation && isUnactivated) {
     return <DeviceActivationScreen />;
