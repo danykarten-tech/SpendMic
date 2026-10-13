@@ -1,4 +1,4 @@
-const SHELL_CACHE_NAME = 'pocket-tracker-shell-v3';
+const SHELL_CACHE_NAME = 'pocket-tracker-shell-v4';
 const VOICE_CACHE_NAME = 'pocket-tracker-voice-v1';
 
 const APP_SHELL_ASSETS = [
@@ -7,6 +7,11 @@ const APP_SHELL_ASSETS = [
   '/manifest.json',
   '/favicon.svg',
   '/icon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-192.png',
+  '/icon-maskable-512.png',
+  '/apple-touch-icon.png',
 ];
 
 const VOICE_MODEL_ASSETS = [
