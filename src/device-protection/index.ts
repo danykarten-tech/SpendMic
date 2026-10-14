@@ -3,6 +3,7 @@ export * from './deviceId';
 export * from './stateMachine';
 export * from './storage';
 export * from './apiClient';
+export * from './installMode';
 export * from './context';
 export * from './DeviceProtectionContext';
 export * from './ui/DeviceActivationScreen';

@@ -1,5 +1,5 @@
-import { LicenseStore } from '../lib/licenseStore';
-import { isValidLicenseKey, isValidUUID, createAuthorizationToken } from '../lib/security';
+import { isValidLicenseKey, isValidUUID } from '../lib/security';
+import { activatePurchasedLicense } from '../lib/licenseService';
 
 export default async function handler(req: any, res: any) {
   // CORS & headers
@@ -37,30 +37,36 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    const result = await LicenseStore.activate(
+    const result = await activatePurchasedLicense({
       licenseKey,
       deviceId,
-      deviceName || 'Browser Device',
-      appVersion || '1.0.0'
-    );
+      deviceName: deviceName || 'Browser Device',
+      appVersion: appVersion || '1.0.0',
+    });
 
     if (result.authorized) {
-      const token = createAuthorizationToken(licenseKey, deviceId);
       return res.status(200).json({
         authorized: true,
         state: 'AUTHORIZED',
-        token,
-        devices: result.activeDevices,
-      });
-    } else {
-      // Slot limit exceeded or license revoked
-      return res.status(403).json({
-        authorized: false,
-        state: 'BLOCKED',
-        message: result.reason || 'Device limit reached. Only 2 active devices allowed per license.',
-        devices: result.activeDevices,
+        token: result.token,
+        devices: result.devices,
       });
     }
+
+    if (result.unavailable) {
+      return res.status(503).json({
+        authorized: false,
+        state: 'TEMPORARY_SERVER_UNAVAILABLE',
+        message: result.reason || 'Licensing service is temporarily unavailable.',
+      });
+    }
+
+    return res.status(403).json({
+        authorized: false,
+        state: 'BLOCKED',
+        message: result.reason || 'This license could not be activated.',
+        devices: result.devices,
+      });
   } catch (err: any) {
     return res.status(500).json({
       authorized: false,

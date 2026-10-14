@@ -43,23 +43,18 @@ export const DesktopSidebar: React.FC = () => {
     >
       {/* Brand Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 8px 24px 8px', borderBottom: '1px solid var(--border-color)' }}>
-        <div
+        <img
+          src="/logo-icon.png"
+          alt="SpendMic"
+          width={32}
+          height={32}
           style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: 'var(--radius-md)',
-            backgroundColor: 'var(--primary-brand)',
-            color: '#FFFFFF',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 700,
-            fontSize: '1.25rem',
-            boxShadow: '0 2px 8px rgba(23, 107, 135, 0.3)',
+            width: '32px',
+            height: '32px',
+            objectFit: 'contain',
+            flexShrink: 0,
           }}
-        >
-          S
-        </div>
+        />
         <div>
           <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--ink-primary)', lineHeight: '1.1' }}>
             SpendMic AI
@@ -519,4 +514,3 @@ export const MobileBottomNav: React.FC = () => {
     </>
   );
 };
-

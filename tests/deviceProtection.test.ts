@@ -5,6 +5,7 @@ import { transitionState } from '../src/device-protection/stateMachine';
 import { DeviceProtectionStorage } from '../src/device-protection/storage';
 import { DeviceProtectionApiClient } from '../src/device-protection/apiClient';
 import { DeviceProtectionState } from '../src/device-protection/types';
+import { isRunningInstalledPWA } from '../src/device-protection/installMode';
 
 describe('SpendMic Device Protection Suite', () => {
   beforeEach(() => {
@@ -232,21 +233,39 @@ describe('SpendMic Device Protection Suite', () => {
     });
   });
 
-  describe('Section 16: Mandatory Activation Gate & Auto-URL Activation', () => {
+  describe('Section 16: Mandatory Activation Gate', () => {
+    it('requires activation only when running as an installed PWA', () => {
+      const originalDescriptor = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: vi.fn().mockReturnValue({ matches: false }),
+      });
+      expect(isRunningInstalledPWA()).toBe(false);
+
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: vi.fn().mockReturnValue({ matches: true }),
+      });
+      expect(isRunningInstalledPWA()).toBe(true);
+
+      if (originalDescriptor) {
+        Object.defineProperty(window, 'matchMedia', originalDescriptor);
+      } else {
+        delete (window as { matchMedia?: typeof window.matchMedia }).matchMedia;
+      }
+    });
+
     it('initializes in UNKNOWN state when no license key exists', () => {
       const cache = DeviceProtectionStorage.load();
       expect(cache.licenseKey).toBeNull();
       expect(cache.state).toBe('UNKNOWN');
     });
 
-    it('extracts license key parameter from URL query string and cleans URL history', () => {
+    it('does not treat a license key in a URL as activation', () => {
       const testUrl = 'https://spendmic.app/?license=SPM-AUTO-URL-KEY#home';
       const parsed = new URL(testUrl);
-      const licenseParam = parsed.searchParams.get('license');
-      expect(licenseParam).toBe('SPM-AUTO-URL-KEY');
-
-      // Verify uppercase normalization
-      expect(licenseParam?.trim().toUpperCase()).toBe('SPM-AUTO-URL-KEY');
+      expect(parsed.searchParams.get('license')).toBe('SPM-AUTO-URL-KEY');
+      expect(DeviceProtectionStorage.load().licenseKey).toBeNull();
     });
   });
 });

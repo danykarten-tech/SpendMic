@@ -1,12 +1,23 @@
-const SHELL_CACHE_NAME = 'pocket-tracker-shell-v3';
+// Bump this whenever a release changes app-shell behavior. It makes every
+// existing installed app and browser tab replace its cached index/bundle on
+// the next visit instead of continuing to execute an older release.
+const SHELL_CACHE_NAME = 'spendmic-shell-v8';
 const VOICE_CACHE_NAME = 'pocket-tracker-voice-v1';
 
 const APP_SHELL_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/logo-icon.png',
+  '/logo-full.png',
+  '/favicon.png',
   '/favicon.svg',
   '/icon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-192.png',
+  '/icon-maskable-512.png',
+  '/apple-touch-icon.png',
 ];
 
 const VOICE_MODEL_ASSETS = [
@@ -22,11 +33,30 @@ const VOICE_MODEL_ASSETS = [
   '/models/whisper-tiny.en/onnx/decoder_model_merged_quantized.onnx',
 ];
 
+// Vite gives production JS/CSS files content-hashed names. Cache the names from
+// the deployed index page at install time so a successful first online visit can
+// reopen offline without guessing those filenames in source code.
+async function cacheBuiltAppShell(cache) {
+  const response = await fetch('/index.html', { cache: 'no-cache' });
+  if (!response.ok) throw new Error('Unable to cache application index.');
+  const html = await response.text();
+  await cache.put('/index.html', new Response(html, { headers: { 'Content-Type': 'text/html' } }));
+
+  const assetPaths = [...html.matchAll(/(?:src|href)="(\/assets\/[^"?]+(?:\?[^"#]*)?)"/g)].map((match) => match[1]);
+  await Promise.all(assetPaths.map(async (assetPath) => {
+    const asset = await fetch(assetPath, { cache: 'no-cache' });
+    if (asset.ok) await cache.put(assetPath, asset);
+  }));
+}
+
 self.addEventListener('install', (event) => {
   console.log('[Service Worker] Installing offline app shell & voice cache...');
   event.waitUntil(
     Promise.all([
-      caches.open(SHELL_CACHE_NAME).then((cache) => cache.addAll(APP_SHELL_ASSETS)),
+      caches.open(SHELL_CACHE_NAME).then(async (cache) => {
+        await cache.addAll(APP_SHELL_ASSETS.filter((asset) => asset !== '/index.html'));
+        await cacheBuiltAppShell(cache);
+      }),
       // Precache voice model assets in background cache
       caches.open(VOICE_CACHE_NAME).then((cache) => {
         return Promise.allSettled(
@@ -127,4 +157,3 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
-

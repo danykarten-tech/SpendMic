@@ -1,5 +1,5 @@
-import { LicenseStore } from '../lib/licenseStore';
-import { isValidLicenseKey, isValidUUID, createAuthorizationToken } from '../lib/security';
+import { isValidLicenseKey, isValidUUID } from '../lib/security';
+import { replacePurchasedDevice } from '../lib/licenseService';
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Content-Type', 'application/json');
@@ -31,23 +31,30 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ success: false, message: 'Invalid new device ID' });
     }
 
-    const result = await LicenseStore.replace(licenseKey, targetDeviceId, newDeviceId, newDeviceName);
+    const result = await replacePurchasedDevice(licenseKey, targetDeviceId, newDeviceId, newDeviceName || 'Browser Device');
 
-    if (result.success) {
-      const token = createAuthorizationToken(licenseKey, newDeviceId);
+    if (result.authorized) {
       return res.status(200).json({
         success: true,
         state: 'AUTHORIZED',
-        token,
+        token: result.token,
         message: 'Device successfully replaced and authorized',
       });
-    } else {
-      return res.status(400).json({
+    }
+
+    if (result.unavailable) {
+      return res.status(503).json({
+        success: false,
+        state: 'TEMPORARY_SERVER_UNAVAILABLE',
+        message: result.reason || 'Licensing service is temporarily unavailable.',
+      });
+    }
+
+    return res.status(400).json({
         success: false,
         state: 'BLOCKED',
         message: result.reason || 'Could not replace device',
       });
-    }
   } catch {
     return res.status(500).json({
       success: false,

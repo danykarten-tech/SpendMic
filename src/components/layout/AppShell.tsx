@@ -15,6 +15,7 @@ import { VoiceAssistantModal } from '../voice/VoiceAssistantModal';
 import { NotificationCenterModal } from '../notifications/NotificationCenterModal';
 import { useApp } from '../../context/AppContext';
 import { useDeviceProtection } from '../../device-protection';
+import { isRunningInstalledPWA } from '../../device-protection/installMode';
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isBlocked, isPending, isUnactivated } = useDeviceProtection();
@@ -50,7 +51,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
     refreshAllData,
   } = useApp();
 
-  if (isBlocked || isUnactivated) {
+  if (isRunningInstalledPWA() && (isBlocked || isUnactivated)) {
     return <>{children}</>;
   }
 

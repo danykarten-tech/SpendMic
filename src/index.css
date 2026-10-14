@@ -153,6 +153,156 @@ button:disabled {
   opacity: 0.6;
 }
 
+/* Public installation page. This stays outside AppProvider so it can never load
+   a customer's local financial state or dashboard UI. */
+.download-page {
+  min-height: 100vh;
+  padding: 28px 20px 64px;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(129, 140, 248, 0.24), transparent 30rem),
+    radial-gradient(circle at 0% 32%, rgba(91, 70, 229, 0.12), transparent 26rem),
+    var(--bg-app);
+}
+
+.download-hero,
+.download-grid,
+.download-steps,
+.download-ready {
+  width: min(100%, 900px);
+  margin-inline: auto;
+}
+
+.download-hero {
+  padding: clamp(44px, 10vw, 88px) 22px 48px;
+  text-align: center;
+}
+
+.download-brand {
+  display: block;
+  width: min(100%, 300px);
+  height: auto;
+  margin: 0 auto;
+}
+
+.download-badge {
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  gap: 6px;
+  margin: 32px auto 16px;
+  padding: 7px 11px;
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius-full);
+  background: var(--primary-subtle);
+  color: var(--primary-brand);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.download-hero h1 {
+  max-width: 700px;
+  margin-inline: auto;
+  font-size: clamp(2.1rem, 5vw, 4rem);
+  letter-spacing: -0.055em;
+}
+
+.download-lead {
+  max-width: 680px;
+  margin: 18px auto 0;
+  font-size: clamp(1rem, 2vw, 1.14rem);
+  line-height: 1.7;
+}
+
+.download-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 29px;
+}
+
+.download-primary,
+.download-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 12px 20px;
+  border-radius: var(--radius-sm);
+  font-size: 0.94rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.download-primary {
+  border: 0;
+  color: #fff;
+  background: var(--primary-gradient);
+  box-shadow: var(--shadow-glow);
+}
+
+.download-secondary {
+  border: 1px solid var(--primary-border);
+  color: var(--primary-brand);
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.download-secondary:hover { text-decoration: none; background: var(--primary-subtle); }
+.download-install-message { margin-top: 14px; color: var(--positive-emerald); font-size: 0.875rem; }
+.download-installed-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 20px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--positive-emerald);
+  color: var(--positive-emerald);
+  font-size: 0.94rem;
+  font-weight: 600;
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.download-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.download-grid article,
+.download-steps,
+.download-ready {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: var(--shadow-sm);
+}
+
+.download-grid article { padding: 23px; }
+.download-grid svg, .download-section-heading svg { color: var(--primary-brand); }
+.download-grid h2 { margin-top: 14px; font-size: 1rem; }
+.download-grid p { margin-top: 7px; font-size: 0.86rem; line-height: 1.6; }
+
+.download-steps { margin-top: 26px; padding: clamp(24px, 5vw, 40px); }
+.download-section-heading { display: flex; gap: 13px; align-items: flex-start; }
+.download-section-heading h2, .download-ready h2 { font-size: 1.25rem; }
+.download-section-heading p { margin-top: 4px; font-size: 0.88rem; }
+.download-steps ol { display: grid; gap: 15px; margin-top: 27px; list-style: none; }
+.download-steps li { display: flex; align-items: flex-start; gap: 12px; color: var(--ink-secondary); font-size: 0.94rem; line-height: 1.55; }
+.download-steps li span { display: grid; flex: 0 0 auto; place-items: center; width: 25px; height: 25px; border-radius: 50%; background: var(--primary-subtle); color: var(--primary-brand); font-size: 0.77rem; font-weight: 700; }
+.download-note { margin: 22px 0 0 37px; font-size: 0.84rem; color: var(--ink-muted); }
+.download-ready { margin-top: 26px; padding: clamp(24px, 5vw, 40px); text-align: center; }
+.download-ready p { max-width: 590px; margin: 9px auto 21px; line-height: 1.6; }
+
+@media (max-width: 680px) {
+  .download-page { padding-inline: 14px; }
+  .download-hero { padding-inline: 8px; }
+  .download-grid { grid-template-columns: 1fr; }
+  .download-primary, .download-secondary { width: 100%; }
+  .download-actions { flex-direction: column; }
+}
+
 /* Scrollbar Customization */
 ::-webkit-scrollbar {
   width: 6px;
@@ -1034,5 +1184,3 @@ button:disabled {
     font-size: 0.625rem !important;
   }
 }
-
-

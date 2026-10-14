@@ -4,7 +4,6 @@ import { Button } from '../../components/ui/Button';
 import { Card, CardContent } from '../../components/ui/Card';
 import { useToast } from '../../components/ui/Toast';
 import {
-  ShieldCheck,
   Key,
   Smartphone,
   ExternalLink,
@@ -16,7 +15,7 @@ interface DeviceActivationScreenProps {
 }
 
 export const DeviceActivationScreen: React.FC<DeviceActivationScreenProps> = ({
-  buyUrl = 'https://spendmic.com',
+  buyUrl = '/download',
 }) => {
   const { activateLicense, deviceName, deviceId } = useDeviceProtection();
   const { showToast } = useToast();
@@ -46,8 +45,7 @@ export const DeviceActivationScreen: React.FC<DeviceActivationScreenProps> = ({
           description: 'Welcome to SpendMic AI! Your device is now active.',
         });
       } else {
-        // If rejected, state transitions to BLOCKED automatically
-        setErrorMessage('Activation was rejected. Only 2 active devices are allowed on this license.');
+        setErrorMessage('We could not verify this license. Check the key and your internet connection, then try again.');
       }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Unable to connect to license verification server.');
@@ -72,21 +70,16 @@ export const DeviceActivationScreen: React.FC<DeviceActivationScreenProps> = ({
           <CardContent style={{ padding: '36px 28px' }}>
             {/* Logo / Badge Header */}
             <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-              <div
+              <img
+                src="/logo-full.png"
+                alt="SpendMic AI — Track Smarter. Live Better."
                 style={{
-                  width: '64px',
-                  height: '64px',
-                  borderRadius: '16px',
-                  backgroundColor: 'var(--primary-subtle)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: '16px',
-                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)',
+                  display: 'block',
+                  width: 'min(100%, 260px)',
+                  height: 'auto',
+                  margin: '0 auto 16px',
                 }}
-              >
-                <ShieldCheck size={36} color="var(--primary-brand)" />
-              </div>
+              />
 
               <h1
                 style={{
@@ -244,7 +237,7 @@ export const DeviceActivationScreen: React.FC<DeviceActivationScreenProps> = ({
                     fontWeight: 500,
                   }}
                 >
-                  <span>Don't have a license? Get SpendMic AI</span>
+                  <span>Need installation help? Visit the SpendMic guide</span>
                   <ExternalLink size={14} />
                 </a>
               </div>

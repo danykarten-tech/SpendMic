@@ -16,16 +16,20 @@ import { SettingsView } from './views/SettingsView';
 import { ITransactionRepository } from './storage/storageRepository';
 
 import { DeviceProtectionProvider, useDeviceProtection, DeviceBlockedScreen, DeviceActivationScreen } from './device-protection';
+import { isRunningInstalledPWA } from './device-protection/installMode';
 
 const MainContent: React.FC = () => {
   const { activeTab } = useApp();
   const { isBlocked, isUnactivated } = useDeviceProtection();
+  // Every production visitor (browser tab or installed PWA) must activate.
+  // In dev (npm run dev) DeviceProtectionContext already bypasses this entirely.
+  const requiresActivation = import.meta.env.PROD || isRunningInstalledPWA();
 
-  if (isUnactivated) {
+  if (requiresActivation && isUnactivated) {
     return <DeviceActivationScreen />;
   }
 
-  if (isBlocked) {
+  if (requiresActivation && isBlocked) {
     return <DeviceBlockedScreen />;
   }
 

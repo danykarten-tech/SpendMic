@@ -10,6 +10,7 @@ import { useApp } from '../context/AppContext';
 import { SUPPORTED_CURRENCIES } from '../domain/types';
 import { BackupDataPayload } from '../domain/backupAndExport';
 import { LicenseSettingsSection } from '../device-protection';
+import { PWAInstallSection } from '../components/ui/PWAInstallSection';
 import {
   ShieldCheck,
   HardDrive,
@@ -24,6 +25,7 @@ import {
   FileSpreadsheet,
   AlertOctagon,
   Lock,
+  Smartphone,
 } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
 
@@ -208,6 +210,37 @@ export const SettingsView: React.FC = () => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         {/* Device Protection Section */}
         <LicenseSettingsSection />
+
+        {/* Install as App (PWA) Section */}
+        <Card>
+          <CardHeader>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: 'var(--primary-subtle)',
+                  color: 'var(--primary-brand)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Smartphone size={18} />
+              </div>
+              <div>
+                <CardTitle>Install SpendMic on Your Device</CardTitle>
+                <CardDescription>
+                  Add SpendMic to your home screen for instant access, full-screen experience, and complete offline use.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <PWAInstallSection />
+          </CardContent>
+        </Card>
 
         {/* Currency Preference Section */}
         <Card>

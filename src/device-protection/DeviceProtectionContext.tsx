@@ -4,11 +4,45 @@ import { DeviceProtectionStorage } from './storage';
 import { transitionState } from './stateMachine';
 import { DeviceProtectionApiClient } from './apiClient';
 import { DeviceProtectionContext, useDeviceProtection } from './context';
+import { verifyOfflineAuthorizationToken } from './licenseToken';
 
 export { useDeviceProtection };
 
+// Local development is determined by Vite at build time. `npm run dev` is the
+// only path that reaches this branch; Vite preview builds and Vercel builds set
+// DEV to false. No environment value, URL, storage value, or user setting can
+// turn this into a customer-build bypass.
+const IS_LOCAL_DEVELOPMENT = import.meta.env.DEV;
+
 export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  if (IS_LOCAL_DEVELOPMENT) {
+    return (
+      <DeviceProtectionContext.Provider
+        value={{
+          state: 'AUTHORIZED',
+          licenseKey: 'DEV-BYPASS',
+          deviceId: 'local-dev',
+          deviceName: 'Local Dev Device',
+          isAuthorized: true,
+          isBlocked: false,
+          isPending: false,
+          isTemporaryServerUnavailable: false,
+          isUnactivated: false,
+          lastVerifiedAt: new Date().toISOString(),
+          blockedReason: undefined,
+          activeDevices: [],
+          activateLicense: async () => true,
+          verifyDevice: async () => true,
+          replaceDevice: async () => true,
+          resetLicense: () => {},
+        }}
+      >
+        {children}
+      </DeviceProtectionContext.Provider>
+    );
+  }
   const [cache, setCache] = useState<DeviceAuthCache>(() => DeviceProtectionStorage.load());
+  const [hasValidOfflineToken, setHasValidOfflineToken] = useState<boolean>(() => !import.meta.env.PROD);
 
   // Helper to update both in-memory state and persistent storage
   const updateCache = useCallback((updates: Partial<DeviceAuthCache>) => {
@@ -95,15 +129,9 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
       }
 
       if (res.isNetworkError) {
-        // If it's a new key or not blocked, transition to pending verification grace
-        const baseState = isNewKey ? 'UNKNOWN' : current.state;
-        const nextState = transitionState(baseState, { type: 'NETWORK_OFFLINE' });
-        updateCache({
-          state: nextState,
-          licenseKey: key,
-          blockedReason: undefined,
-        });
-        return true; // Allows pending offline grace
+        // A new key is never trusted while offline. Previously authorized
+        // devices retain offline access through verifyDevice(), not activation.
+        return false;
       }
 
       // Explicit server rejection (e.g. 2-device limit exceeded)
@@ -159,6 +187,19 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
     setCache(DeviceProtectionStorage.getInitialCache());
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!import.meta.env.PROD) {
+      setHasValidOfflineToken(true);
+      return undefined;
+    }
+    setHasValidOfflineToken(false);
+    void verifyOfflineAuthorizationToken(cache.token).then((valid) => {
+      if (!cancelled) setHasValidOfflineToken(valid);
+    });
+    return () => { cancelled = true; };
+  }, [cache.token]);
+
   // Background verification on load and on reconnecting online
   useEffect(() => {
     const handleOnline = () => {
@@ -174,23 +215,6 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
 
     window.addEventListener('online', handleOnline);
 
-    // Auto-activate via URL query parameter (e.g. ?license=SPM-... or ?key=SPM-...)
-    if (typeof window !== 'undefined') {
-      try {
-        const searchParams = new URLSearchParams(window.location.search);
-        const urlKey = searchParams.get('license') || searchParams.get('key');
-        if (urlKey && urlKey.trim().length > 0) {
-          const cleanKey = urlKey.trim().toUpperCase();
-          // Remove query param from browser address bar without reloading
-          const newUrl = window.location.pathname + window.location.hash;
-          window.history.replaceState({}, document.title, newUrl);
-          activateLicense(cleanKey);
-        }
-      } catch {
-        // Fallback
-      }
-    }
-
     // Initial check
     if (cache.licenseKey) {
       if (cache.state === 'PENDING_VERIFICATION') {
@@ -205,11 +229,11 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
     };
   }, [activateLicense, verifyDevice, cache.licenseKey, cache.state]);
 
-  const isAuthorized = cache.state === 'AUTHORIZED';
+  const isAuthorized = cache.state === 'AUTHORIZED' && hasValidOfflineToken;
   const isBlocked = cache.state === 'BLOCKED' || cache.state === 'REPLACEMENT_REQUIRED';
   const isPending = cache.state === 'PENDING_VERIFICATION';
   const isTemporaryServerUnavailable = cache.state === 'TEMPORARY_SERVER_UNAVAILABLE';
-  const isUnactivated = !cache.licenseKey || cache.state === 'UNKNOWN';
+  const isUnactivated = !cache.licenseKey || cache.state === 'UNKNOWN' || !hasValidOfflineToken;
 
   return (
     <DeviceProtectionContext.Provider

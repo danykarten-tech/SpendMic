@@ -1,5 +1,5 @@
-import { LicenseStore } from '../lib/licenseStore';
-import { isValidLicenseKey, isValidUUID, verifyAuthorizationToken, createAuthorizationToken } from '../lib/security';
+import { isValidLicenseKey, isValidUUID } from '../lib/security';
+import { verifyPurchasedLicense } from '../lib/licenseService';
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Content-Type', 'application/json');
@@ -17,7 +17,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-    const { licenseKey, deviceId, token } = body;
+    const { licenseKey, deviceId } = body;
 
     if (!licenseKey || !isValidLicenseKey(licenseKey)) {
       return res.status(400).json({
@@ -35,37 +35,30 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // Check backend store
-    const storeResult = await LicenseStore.verify(licenseKey, deviceId);
+    const storeResult = await verifyPurchasedLicense(licenseKey, deviceId);
 
     if (storeResult.authorized) {
-      // Re-issue fresh token
-      const newToken = createAuthorizationToken(licenseKey, deviceId);
       return res.status(200).json({
         authorized: true,
         state: 'AUTHORIZED',
-        token: newToken,
+        token: storeResult.token,
         serverTime: new Date().toISOString(),
       });
     }
 
-    // If store says device is deactivated or missing, but client provided a token: verify token signature
-    if (token) {
-      const tokenVerification = verifyAuthorizationToken(token, licenseKey, deviceId);
-      if (!tokenVerification.valid) {
-        return res.status(403).json({
-          authorized: false,
-          state: 'BLOCKED',
-          message: 'Authorization token invalid or revoked',
-          serverTime: new Date().toISOString(),
-        });
-      }
+    if (storeResult.unavailable) {
+      return res.status(503).json({
+        authorized: false,
+        state: 'TEMPORARY_SERVER_UNAVAILABLE',
+        message: storeResult.reason || 'Licensing service is temporarily unavailable.',
+        serverTime: new Date().toISOString(),
+      });
     }
 
     return res.status(403).json({
       authorized: false,
       state: 'BLOCKED',
-      message: storeResult.reason || 'Device is not authorized on this license',
+      message: storeResult.reason || 'Device is not authorized on this license.',
       serverTime: new Date().toISOString(),
     });
   } catch {

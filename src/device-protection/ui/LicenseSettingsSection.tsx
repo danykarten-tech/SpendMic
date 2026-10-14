@@ -5,6 +5,7 @@ import { Badge } from '../../components/ui/Badge';
 import { useDeviceProtection } from '../context';
 import { useToast } from '../../components/ui/Toast';
 import { DeviceReplacementModal } from './DeviceReplacementModal';
+import { isRunningInstalledPWA } from '../installMode';
 import {
   ShieldCheck,
   Smartphone,
@@ -97,6 +98,10 @@ export const LicenseSettingsSection: React.FC = () => {
     }
     return <Badge variant="muted">Unregistered Device</Badge>;
   };
+
+  // Browser access is intentionally key-free. Licensing appears only in the
+  // installed PWA, where activation is required to use the product.
+  if (!isRunningInstalledPWA()) return null;
 
   return (
     <>
