@@ -20,7 +20,7 @@ describe('Payhip server-side license verification', () => {
     process.env.PAYHIP_PRODUCT_SECRET_KEY = 'server-only-secret';
     process.env.PAYHIP_PRODUCT_LINK = 'spendmic-product';
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      data: { enabled: true, product_link: 'spendmic-product', buyer_email: 'buyer@example.test' },
+      data: { enabled: true, product_link: 'spendmic-product', license_key: 'SPM-PAID-1234', buyer_email: 'buyer@example.test' },
     }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -41,6 +41,33 @@ describe('Payhip server-side license verification', () => {
     await expect(verifyPayhipLicense('SPM-NOT-PAID-1234')).resolves.toMatchObject({
       valid: false,
       reason: 'This license key is inactive or is for a different product.',
+    });
+  });
+
+  it('rejects malformed responses and a response for a different license key', async () => {
+    process.env.PAYHIP_PRODUCT_SECRET_KEY = 'server-only-secret';
+    process.env.PAYHIP_PRODUCT_LINK = 'spendmic-product';
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      data: { enabled: true, product_link: 'spendmic-product', license_key: 'SPM-SOMEONE-ELSE' },
+    }), { status: 200 })));
+    await expect(verifyPayhipLicense('SPM-PAID-1234')).resolves.toMatchObject({ valid: false });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 })));
+    await expect(verifyPayhipLicense('SPM-PAID-1234')).resolves.toEqual({
+      valid: false,
+      reason: 'The purchase verification response was invalid.',
+    });
+  });
+
+  it('treats Payhip network failures as temporary, never as an invalid purchase', async () => {
+    process.env.PAYHIP_PRODUCT_SECRET_KEY = 'server-only-secret';
+    process.env.PAYHIP_PRODUCT_LINK = 'spendmic-product';
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+
+    await expect(verifyPayhipLicense('SPM-PAID-1234')).resolves.toMatchObject({
+      valid: false,
+      unavailable: true,
     });
   });
 

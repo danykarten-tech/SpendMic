@@ -194,7 +194,7 @@ export const DeviceProtectionProvider: React.FC<{ children: React.ReactNode }> =
       return undefined;
     }
     setHasValidOfflineToken(false);
-    void verifyOfflineAuthorizationToken(cache.token).then((valid) => {
+    void verifyOfflineAuthorizationToken(cache.token, cache.deviceId).then((valid) => {
       if (!cancelled) setHasValidOfflineToken(valid);
     });
     return () => { cancelled = true; };

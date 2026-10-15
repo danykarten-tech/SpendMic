@@ -258,14 +258,14 @@ export const DeviceBlockedScreen: React.FC = () => {
                   resetLicense();
                   showToast({
                     type: 'info',
-                    title: 'Device Reset',
-                    description: 'Device registration cleared. Enter your license key to activate.',
+                    title: 'Local License Cleared',
+                    description: 'Saved browser authorization was cleared. This does not free a device slot.',
                   });
                 }}
                 leftIcon={<RotateCcw size={15} />}
                 style={{ width: '100%', justifyContent: 'center', fontSize: '0.8125rem', color: 'var(--text-muted)' }}
               >
-                Reset Device / Enter Different Key
+                Clear Local License / Enter Different Key
               </Button>
             </div>
 

@@ -1,15 +1,11 @@
 import { isValidLicenseKey, isValidUUID } from '../lib/security';
 import { verifyPurchasedLicense } from '../lib/licenseService';
+import { applyCors } from '../lib/requestSecurity';
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  res.setHeader('Cache-Control', 'no-store');
+  if (!applyCors(req, res, 'POST, OPTIONS')) return;
 
   if (req.method !== 'POST') {
     return res.status(405).json({ authorized: false, message: 'Method Not Allowed' });

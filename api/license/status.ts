@@ -1,28 +1,25 @@
 import { isValidLicenseKey } from '../lib/security';
 import { getPurchasedLicenseStatus } from '../lib/licenseService';
+import { applyCors } from '../lib/requestSecurity';
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Cache-Control', 'no-store');
+  if (!applyCors(req, res, 'POST, OPTIONS')) return;
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'GET') {
+  if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method Not Allowed' });
   }
 
   try {
-    const { key } = req.query || {};
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const { licenseKey } = body;
 
-    if (!key || !isValidLicenseKey(key)) {
+    if (!licenseKey || !isValidLicenseKey(licenseKey)) {
       return res.status(400).json({ message: 'Invalid or missing license key' });
     }
 
-    const info = await getPurchasedLicenseStatus(key);
+    const info = await getPurchasedLicenseStatus(licenseKey);
 
     if (info.unavailable) {
       return res.status(503).json({ message: info.reason || 'Licensing service is temporarily unavailable.' });
@@ -33,7 +30,6 @@ export default async function handler(req: any, res: any) {
     }
 
     return res.status(200).json({
-      licenseKey: key,
       status: info.authorized ? 'ACTIVE' : 'REVOKED',
       activeDeviceCount: info.devices.length,
       maxDevices: 2,

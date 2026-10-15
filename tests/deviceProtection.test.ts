@@ -6,6 +6,7 @@ import { DeviceProtectionStorage } from '../src/device-protection/storage';
 import { DeviceProtectionApiClient } from '../src/device-protection/apiClient';
 import { DeviceProtectionState } from '../src/device-protection/types';
 import { isRunningInstalledPWA } from '../src/device-protection/installMode';
+import { verifyOfflineAuthorizationToken } from '../src/device-protection/licenseToken';
 
 describe('SpendMic Device Protection Suite', () => {
   beforeEach(() => {
@@ -199,6 +200,42 @@ describe('SpendMic Device Protection Suite', () => {
       const wrongDevCheck = verifyAuthorizationToken(token, licenseKey, '00000000-0000-4000-8000-000000000000');
       expect(wrongDevCheck.valid).toBe(false);
       expect(wrongDevCheck.reason).toBe('Device ID mismatch');
+    });
+
+    it('creates an offline receipt without a default expiry so an authorized PWA can reopen offline', () => {
+      const licenseKey = 'SPM-OFFLINE-100';
+      const deviceId = '99999999-9999-4999-8999-999999999999';
+      const token = createAuthorizationToken(licenseKey, deviceId);
+      const payload = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString('utf8'));
+
+      expect(payload.licenseKey).toBeUndefined();
+      expect(payload.licenseHash).toBeDefined();
+      expect(payload.expiresAt).toBeUndefined();
+      expect(verifyAuthorizationToken(token, licenseKey, deviceId).valid).toBe(true);
+      expect(verifyAuthorizationToken(token, licenseKey, '00000000-0000-4000-8000-000000000000').valid).toBe(false);
+    });
+
+    it('rejects a signed receipt copied to a different browser device ID before accepting it offline', async () => {
+      const priorCrypto = globalThis.crypto;
+      const verify = vi.fn().mockResolvedValue(true);
+      Object.defineProperty(globalThis, 'crypto', {
+        configurable: true,
+        value: { subtle: { importKey: vi.fn().mockResolvedValue({}), verify } },
+      });
+
+      try {
+        const payload = Buffer.from(JSON.stringify({
+          authorized: true,
+          deviceId: '11111111-1111-4111-8111-111111111111',
+          issuedAt: Date.now(),
+        })).toString('base64url');
+        const token = `${payload}.signature`;
+        await expect(verifyOfflineAuthorizationToken(token, '11111111-1111-4111-8111-111111111111', 'dGVzdA')).resolves.toBe(true);
+        await expect(verifyOfflineAuthorizationToken(token, '22222222-2222-4222-8222-222222222222', 'dGVzdA')).resolves.toBe(false);
+        expect(verify).toHaveBeenCalledTimes(1);
+      } finally {
+        Object.defineProperty(globalThis, 'crypto', { configurable: true, value: priorCrypto });
+      }
     });
 
     it('confirms client API requests never include financial records or expense data', async () => {
