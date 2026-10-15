@@ -33,20 +33,30 @@ export function isValidLicenseKey(key: string): boolean {
 }
 
 export interface TokenPayload {
-  licenseKey: string;
+  licenseHash: string;
   deviceId: string;
   authorized: boolean;
   issuedAt: number;
-  expiresAt: number;
+  expiresAt?: number;
 }
 
-export function createAuthorizationToken(licenseKey: string, deviceId: string, durationMs: number = 30 * 24 * 60 * 60 * 1000): string {
+function hashLicenseKey(licenseKey: string): string {
+  return crypto.createHash('sha256').update(licenseKey.trim().toUpperCase()).digest('hex');
+}
+
+/**
+ * The receipt intentionally has no default expiry. A customer who activated
+ * successfully can reopen the offline PWA until a later successful online
+ * verification reports a revocation. Callers may supply an expiry for a
+ * deliberately time-limited environment.
+ */
+export function createAuthorizationToken(licenseKey: string, deviceId: string, durationMs?: number): string {
   const payload: TokenPayload = {
-    licenseKey: licenseKey.trim().toUpperCase(),
+    licenseHash: hashLicenseKey(licenseKey),
     deviceId,
     authorized: true,
     issuedAt: Date.now(),
-    expiresAt: Date.now() + durationMs,
+    ...(durationMs === undefined ? {} : { expiresAt: Date.now() + durationMs }),
   };
 
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -84,10 +94,13 @@ export function verifyAuthorizationToken(token: string, expectedLicenseKey?: str
 
   try {
     const payload: TokenPayload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
-    if (payload.expiresAt < Date.now()) {
+    if (!payload || payload.authorized !== true || typeof payload.licenseHash !== 'string' || typeof payload.deviceId !== 'string' || typeof payload.issuedAt !== 'number') {
+      return { valid: false, reason: 'Invalid authorization payload' };
+    }
+    if (payload.expiresAt !== undefined && (typeof payload.expiresAt !== 'number' || payload.expiresAt < Date.now())) {
       return { valid: false, reason: 'Token has expired' };
     }
-    if (expectedLicenseKey && payload.licenseKey !== expectedLicenseKey.trim().toUpperCase()) {
+    if (expectedLicenseKey && payload.licenseHash !== hashLicenseKey(expectedLicenseKey)) {
       return { valid: false, reason: 'License key mismatch' };
     }
     if (expectedDeviceId && payload.deviceId !== expectedDeviceId) {

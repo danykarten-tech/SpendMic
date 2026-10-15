@@ -71,7 +71,6 @@ export interface ReplaceResponse {
 }
 
 export interface StatusResponse {
-  licenseKey: string;
   status: string;
   activeDeviceCount: number;
   maxDevices: number;

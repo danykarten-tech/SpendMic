@@ -227,14 +227,14 @@ export const LicenseSettingsSection: React.FC = () => {
                     resetLicense();
                     showToast({
                       type: 'info',
-                      title: 'License Reset',
-                      description: 'Device de-registered. Showing activation screen.',
+                      title: 'Local License Cleared',
+                      description: 'This clears this browser’s saved license. It does not free a device slot; use Manage Registered Devices to replace a device.',
                     });
                   }}
                   leftIcon={<RotateCcw size={16} />}
                   style={{ color: 'var(--danger-crimson)' }}
                 >
-                  Deactivate / Reset Device
+                  Clear Local License
                 </Button>
               )}
             </div>

@@ -1,16 +1,12 @@
 import { isValidLicenseKey, isValidUUID } from '../lib/security';
 import { activatePurchasedLicense } from '../lib/licenseService';
+import { allowActivationAttempt, applyCors, isSafeDeviceName } from '../lib/requestSecurity';
 
 export default async function handler(req: any, res: any) {
   // CORS & headers
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  res.setHeader('Cache-Control', 'no-store');
+  if (!applyCors(req, res, 'POST, OPTIONS')) return;
 
   if (req.method !== 'POST') {
     return res.status(405).json({ authorized: false, message: 'Method Not Allowed' });
@@ -37,10 +33,18 @@ export default async function handler(req: any, res: any) {
       });
     }
 
+    if (deviceName !== undefined && !isSafeDeviceName(deviceName)) {
+      return res.status(400).json({ authorized: false, state: 'BLOCKED', message: 'Invalid device name.' });
+    }
+
+    if (!allowActivationAttempt(req)) {
+      return res.status(429).json({ authorized: false, state: 'TEMPORARY_SERVER_UNAVAILABLE', message: 'Too many activation attempts. Please try again shortly.' });
+    }
+
     const result = await activatePurchasedLicense({
       licenseKey,
       deviceId,
-      deviceName: deviceName || 'Browser Device',
+      deviceName: deviceName?.trim() || 'Browser Device',
       appVersion: appVersion || '1.0.0',
     });
 

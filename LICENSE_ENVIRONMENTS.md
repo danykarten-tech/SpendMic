@@ -30,6 +30,12 @@ then registered against at most two devices in Supabase. The browser stores the
 resulting signed offline authorization token and local financial data stays in
 IndexedDB.
 
+Offline receipts have no automatic expiry: a customer who successfully
+activated can reopen SpendMic without a network connection. A refund or
+disabled Payhip key is detected only after a successful later online license
+verification; a network outage must never erase financial data or by itself
+block an already authorized device.
+
 ## Required email-verification integration
 
 Payhip supplies the buyer email to the server, but this project does not yet
